@@ -60,7 +60,14 @@ age_crosswalk_9 <- tibble::tibble(
     "[80,90)"
   ),
   age_start = seq(0, 80, by = 10),
-  age_end = seq(9, 89, by = 10)
+  age_end = seq(9, 89, by = 10),
+  rr_age_group = c(
+    "0–19", "0–19",
+    "20–39", "20–39",
+    "40–59", "40–59",
+    "60–79", "60–79",
+    "80+"
+  )
 )
 
 age_crosswalk_9
@@ -161,7 +168,8 @@ country_iso3 <- combined_burden |>
 all_age_infection <- all_age_infection |>
   dplyr::left_join(
     country_iso3,
-    by = "country"
+    by = "country",
+    relationship = "many-to-one"
   )
 
 all_age_infection <- all_age_infection |>
@@ -177,7 +185,8 @@ pop_5yr_long <- pop_5yr_long |>
   dplyr::left_join(
     all_age_infection |>
       dplyr::distinct(country, iso3),
-    by = "country"
+    by = "country",
+    relationship = "many-to-one"
   )
 
 
@@ -266,18 +275,13 @@ infection_10yr_long <- all_age_infection |>
   dplyr::mutate(
     group_number = as.integer(
       sub("tot_infec_med_group", "", group)
-    ),
-    burden_age_group = dplyr::case_when(
-      group_number == 1 ~ "[0,10)",
-      group_number == 2 ~ "[10,20)",
-      group_number == 3 ~ "[20,30)",
-      group_number == 4 ~ "[30,40)",
-      group_number == 5 ~ "[40,50)",
-      group_number == 6 ~ "[50,60)",
-      group_number == 7 ~ "[60,70)",
-      group_number == 8 ~ "[70,80)",
-      group_number == 9 ~ "[80,90)"
     )
+  ) |>
+  dplyr::left_join(
+    age_crosswalk_9 |>
+      dplyr::select(group_number = group, burden_age_group),
+    by = "group_number",
+    relationship = "many-to-one"
   )
 
 infection_10yr_long_0_79 <- infection_10yr_long |>
@@ -317,15 +321,11 @@ infection_comorb <- infection_with_prev |>
 
 ##
 infection_comorb <- infection_comorb |>
-  dplyr::mutate(
-    rr_age_group = dplyr::case_when(
-      group_number %in% c(1, 2) ~ "0–19",
-      group_number %in% c(3, 4) ~ "20–39",
-      group_number %in% c(5, 6) ~ "40–59",
-      group_number %in% c(7, 8) ~ "60–79",
-      group_number == 9 ~ "80+",
-      TRUE ~ NA_character_
-    )
+  dplyr::left_join(
+    age_crosswalk_9 |>
+      dplyr::select(group_number = group, rr_age_group),
+    by = "group_number",
+    relationship = "many-to-one"
   )
 infection_comorb_long <- infection_comorb |>
   tidyr::pivot_longer(
@@ -456,28 +456,11 @@ prev_comorb_long <- bg_prev_10yr |>
   )
 
 prev_comorb_long <- prev_comorb_long |>
-  dplyr::mutate(
-    group_number = dplyr::case_when(
-      burden_age_group == "[0,10)"  ~ 1L,
-      burden_age_group == "[10,20)" ~ 2L,
-      burden_age_group == "[20,30)" ~ 3L,
-      burden_age_group == "[30,40)" ~ 4L,
-      burden_age_group == "[40,50)" ~ 5L,
-      burden_age_group == "[50,60)" ~ 6L,
-      burden_age_group == "[60,70)" ~ 7L,
-      burden_age_group == "[70,80)" ~ 8L,
-      burden_age_group == "[80,90)" ~ 9L,
-      TRUE ~ NA_integer_
-    ),
-    
-    rr_age_group = dplyr::case_when(
-      group_number %in% c(1L, 2L) ~ "0–19",
-      group_number %in% c(3L, 4L) ~ "20–39",
-      group_number %in% c(5L, 6L) ~ "40–59",
-      group_number %in% c(7L, 8L) ~ "60–79",
-      group_number == 9L ~ "80+",
-      TRUE ~ NA_character_
-    )
+  dplyr::left_join(
+    age_crosswalk_9 |>
+      dplyr::select(burden_age_group, group_number = group, rr_age_group),
+    by = "burden_age_group",
+    relationship = "many-to-one"
   )
 
 prev_rr_long <- prev_comorb_long |>
@@ -530,9 +513,13 @@ adjusted_hosp_rate <- prev_rr_hosp_long |>
     
     hosp_rate_reference =
       marginal_hosp_rate / weighted_rr,
-    
+
     adjusted_hosp_rate =
-      hosp_rate_reference * rr_hosp_draw
+      dplyr::if_else(
+        is.finite(hosp_rate_reference * rr_hosp_draw),
+        hosp_rate_reference * rr_hosp_draw,
+        NA_real_
+      )
   ) |>
   dplyr::ungroup()
 
@@ -551,12 +538,6 @@ adjusted_hosp_rate_103 <- adjusted_hosp_rate |>
     analysis_iso3,
     by = "iso3"
   )
-
-comorbid_burden_step1 <- calculate_comorbid_burden_step1(
-  infection_comorb_long = infection_comorb_long,
-  adjusted_hosp_rate = adjusted_hosp_rate_103,
-  lhs_sample = lhs_sample_young
-)
 
 comorbid_burden_step2 <-
   calculate_comorbid_burden_step2(
