@@ -1,6 +1,10 @@
-load("MainData/rr_hosp_model.RData")
-load("MainData/allfoi_s1.RData")
+## 0. Load libraries, shared functions, and all data objects this script
+##    depends on (rr_hosp_model, allfoi, all_age_infection, combined_burden,
+##    bg_count_dist_wide, hosp_sample, fatal_sample, nh_fatal_sample,
+##    lhs_sample_young, etc.)
+source("open_data.R")
 
+## 1. Shared ggplot theme for all figures in this script ------------------
 theme_lancet_clean <- function(base_size = 11) {
   
   ggplot2::theme_classic(
@@ -72,7 +76,7 @@ age_crosswalk_9 <- tibble::tibble(
 
 age_crosswalk_9
 
-# 2. 
+## 2. Reshape population into 5-year age bands ----------------------------
 pop_5yr <- all_age_infection |>
   dplyr::transmute(
     country,
@@ -124,7 +128,9 @@ pop_5yr_long <- pop_5yr |>
     )
   )
 
-# 3. 
+## 3. Attach comorbidity prevalence data to population, harmonise on iso3 -
+##    (a country_name-keyed join is tried first, then superseded below by
+##    an iso3-keyed join once the iso3 crosswalk is available)
 bg_count_dist_0_89 <- bg_count_dist_wide |>
   dplyr::filter(!is.na(burden_age_group))
 
@@ -259,7 +265,8 @@ bg_prev_10yr <- bg_count_with_pop |>
     .groups = "drop"
   )
 
-##
+## 4. Reshape total infections into 10-year age bands and attach
+##    comorbidity prevalence ------------------------------------------------
 infection_10yr_long <- all_age_infection |>
   dplyr::select(
     iso3,
