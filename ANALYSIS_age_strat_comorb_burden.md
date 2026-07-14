@@ -4,7 +4,7 @@ Written after the fact to document what this script actually does and how the pi
 
 ## What it does, in one paragraph
 
-Takes country-level chikungunya infection estimates (already split into 10-year age bands) and combines them with (a) background comorbidity prevalence by age/country and (b) literature relative-risk (RR) estimates for hospitalisation by comorbidity count, to produce comorbidity-stratified estimates of symptomatic infections, hospitalisations, non-fatal YLDs, and deaths — each run 1,000 times via Latin Hypercube Sampling (LHS) for uncertainty. It ends with a series of Lancet-style ggplot2 figures, then tacks on an unrelated FOI (force-of-infection) aggregation step at the very end.
+Takes country-level chikungunya infection estimates (already split into 10-year age bands) and combines them with (a) background comorbidity prevalence by age/country and (b) literature relative-risk (RR) estimates for hospitalisation by comorbidity count, to produce comorbidity-stratified estimates of symptomatic infections, hospitalisations, non-fatal YLDs, and deaths — each run 1,000 times via Latin Hypercube Sampling (LHS) for uncertainty.
 
 ## What must already exist before running this script
 
