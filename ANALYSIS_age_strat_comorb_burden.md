@@ -17,7 +17,7 @@ The script opens with `source("open_data.R")`. `open_data.R` loads library, sour
 | `bg_count_dist_wide` | An **external** file outside this repo: `../CHIK_MORBID/CHIK_MORBID/01_Data/calc_outputs/bg_count_dist_wide.RData`, normally loaded by scripts like `add_multimorbidity_rr.R` / `integrate_rr_fast.R` — `open_data.R` expects a copy at `MainData/bg_count_dist_wide.RData` (not yet placed there as of 2026-07-14) |
 | `hosp_sample`, `fatal_sample`, `nh_fatal_sample`, `le_sample`, `lhs_sample_young`, `lhs_old` | `lhs_samples.R` (root) — saved directly to `MainData/` |
 | `calculate_comorbid_burden_step2` (and the now-unused `_step1`) | `Functions/BurdenFunctions_v2.R`, sourced by `open_data.R` |
-| `rr_hosp_model` | `MainData/rr_hosp_model.RData` — hand-curated literature RR table, no generating script in this repo |
+| `rr_hosp_model` | `MainData/rr_hosp_model.RData` — RR table, no generating script in this repo |
 | `allfoi` | `MainData/allfoi_s1.RData` — produced by an upstream FOI/geostatistical modeling pipeline not visible in this repo |
 
 See `inst.md` for the full script/object dependency diagram.
