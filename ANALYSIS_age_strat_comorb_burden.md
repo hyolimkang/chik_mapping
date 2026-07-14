@@ -4,9 +4,6 @@ Written after the fact to document what this script actually does, why, and how 
 
 ## Analysis plan
 
-<<<<<<< Updated upstream
-Takes country-level chikungunya infection estimates (already split into 10-year age bands) and combines them with (a) background comorbidity prevalence by age/country and (b) literature relative-risk (RR) estimates for hospitalisation by comorbidity count, to produce comorbidity-stratified estimates of symptomatic infections, hospitalisations, non-fatal YLDs, and deaths — each run 1,000 times via Latin Hypercube Sampling (LHS) for uncertainty.
-=======
 **Objective.** Estimate the comorbidity-stratified clinical burden of chikungunya (symptomatic infections, hospitalisations, non-fatal health loss (YLDs), and deaths) by country and 10-year age band, propagating parameter uncertainty throughout via a 1,000-run Latin Hypercube Sample (LHS).
 
 **Population and unit of analysis.** All countries with chikungunya infection estimates (from the wider FOI/burden-mapping pipeline), stratified by 10-year age band (0–9 … 70–79; the 80+ band is dropped from most outputs, see `group_number <= 8` filters) and comorbidity count (0, 1, 2, 3+).
@@ -29,11 +26,10 @@ Takes country-level chikungunya infection estimates (already split into 10-year 
 **Outputs.** Four ggplot2 figures (`p_hospitalisation`, `p_region`, `p_spaghetti_hosp`, `p_fatal_burden`) and one unconsumed summary table (`surface_country_summary` — see the "Object-level data flow" section for why that one is currently a dead end).
 
 **Key methodological assumption worth flagging:** step 4 above is the single most consequential modelling choice in this script — it assumes the literature RRs are consistent enough with the observed marginal hospitalisation rate that "back-solving" for a reference rate is meaningful. If the RR estimates and the marginal rate come from different populations/time periods, this back-calculation can silently produce reference rates that are too high or too low (see the `is.finite()` guard added below, which catches the extreme case but not a merely-biased one).
->>>>>>> Stashed changes
 
 ## What must already exist before running this script
 
-The script opens with `source("open_data.R")`. `open_data.R` loads library, sources `Functions/age_strat_subinf_func_final.R` and `Functions/BurdenFunctions_v2.R`, and `load()`s every data object below from `MainData/`:
+The script opens with `source("open_data.R")`. `open_data.R` loads libraries, sources `Functions/age_strat_subinf_func_final.R` and `Functions/BurdenFunctions_v2.R`, and `load()`s every data object below from `MainData/`:
 
 | Object | Where it comes from |
 |---|---|
@@ -41,23 +37,15 @@ The script opens with `source("open_data.R")`. `open_data.R` loads library, sour
 | `combined_burden` | `cookie_cut_map.R` (or the `Scripts/` copy) — saved to the repo root as `combined_burden_shrink.RData`, then copied into `MainData/` by hand |
 | `bg_count_dist_wide` | An **external** file outside this repo: `../CHIK_MORBID/CHIK_MORBID/01_Data/calc_outputs/bg_count_dist_wide.RData`, normally loaded by scripts like `add_multimorbidity_rr.R` / `integrate_rr_fast.R` — `open_data.R` expects a copy at `MainData/bg_count_dist_wide.RData` (not yet placed there as of 2026-07-14) |
 | `hosp_sample`, `fatal_sample`, `nh_fatal_sample`, `le_sample`, `lhs_sample_young`, `lhs_old` | `lhs_samples.R` (root) — saved directly to `MainData/` |
-<<<<<<< Updated upstream
-| `calculate_comorbid_burden_step2` (and the now-unused `_step1`) | `Functions/BurdenFunctions_v2.R`, sourced by `open_data.R` |
-| `rr_hosp_model` | `MainData/rr_hosp_model.RData` — RR table, no generating script in this repo |
-=======
 | `calculate_comorbid_burden_step2` | `Functions/BurdenFunctions_v2.R`, sourced by `open_data.R` |
 | `rr_hosp_model` | `MainData/rr_hosp_model.RData` — hand-curated literature RR table, no generating script in this repo |
->>>>>>> Stashed changes
 | `allfoi` | `MainData/allfoi_s1.RData` — produced by an upstream FOI/geostatistical modeling pipeline not visible in this repo |
 
 See `inst.md` for the full script/object dependency diagram.
 
-<<<<<<< Updated upstream
-=======
 **Known data-quality issue, still unresolved as of 2026-07-14:** `lhs_samples.R` defines `fatal_sample` **twice** (once around line 346, once around line 381) with different `qbeta` formulas. Only the *first* definition is ever `save()`d to `MainData/fatal_sample.RData` (line 362) — the second, more carefully age-varying version is computed afterward and silently discarded (never saved, never used again). That means every fatal-burden number this script produces is built from the first, cruder formula (which also reuses the same `C[,5]` draw column for age groups 1–6, rather than a distinct column per group). **Checked again on 2026-07-14:** `lhs_samples.R` on disk is unchanged (the bug is still there), yet `MainData/fatal_sample.RData` has a newer file timestamp than the script — meaning it was regenerated some other way (e.g. corrected code run directly in an R console) rather than by re-running the saved script. If you intended to fix this, the fix hasn't been written back into `lhs_samples.R` yet, so re-running the script from scratch will reproduce the old, buggy file.
 
 **Practical implication:** if `open_data.R`'s `load()` calls point at files that don't exist yet (e.g. `bg_count_dist_wide.RData` before it's copied into `MainData/`), the script fails immediately and loudly with "cannot open file" — which is safer than the old silent behavior of quietly reusing whatever was left in the R session from an earlier run.
->>>>>>> Stashed changes
 
 ## Object-level data flow inside this script
 
@@ -134,7 +122,7 @@ flowchart TD
 - Guarded `adjusted_hosp_rate` against divide-by-zero producing silent `Inf`/`-Inf`.
 - Collapsed 4 hand-written `case_when` blocks into joins against `age_crosswalk_9`.
 
-**Pass 2 (cross-check, this pass):**
+**Pass 2 (cross-check):**
 - Removed a redundant `bg_count_with_pop` join keyed on `country_name` that was unconditionally overwritten before ever being read.
 - Removed 4 more dead objects that were computed and never used again: `bg_count_dist_analysis`, `bg_regional_prev`, `infection_comorb_rr`, `prev_comorb_long_103`.
 - Vectorized `country_foi`'s median/quantile computation (matrix + `apply()` instead of `dplyr::rowwise()`/`c_across()`).
