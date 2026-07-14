@@ -22,9 +22,6 @@ The script opens with `source("open_data.R")`. `open_data.R` loads library, sour
 
 See `inst.md` for the full script/object dependency diagram.
 
-**Known data-quality issue, not fixed here (lives in a different file):** `lhs_samples.R` defines `fatal_sample` **twice** (once around line 346, once around line 381) with different `qbeta` formulas. Only the *first* definition is ever `save()`d to `MainData/fatal_sample.RData` (line 362) — the second, more carefully age-varying version is computed afterward and silently discarded (never saved, never used again). That means every fatal-burden number this script produces is built from the first, cruder formula (which also reuses the same `C[,5]` draw column for age groups 1–6, rather than a distinct column per group). If the fatality outputs look off, this is the first thing to check in `lhs_samples.R`.
-
-**Practical implication:** if `open_data.R`'s `load()` calls point at files that don't exist yet (e.g. `bg_count_dist_wide.RData` before it's copied into `MainData/`), the script fails immediately and loudly with "cannot open file" — which is safer than the old silent behavior of quietly reusing whatever was left in the R session from an earlier run.
 
 ## Object-level data flow inside this script
 
