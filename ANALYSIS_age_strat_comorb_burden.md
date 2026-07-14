@@ -8,21 +8,70 @@ Takes country-level chikungunya infection estimates (already split into 10-year 
 
 ## What must already exist before running this script
 
-This script is not self-contained — it assumes a lot of state already sitting in the R global environment from other scripts run earlier in the same session, and it does not check for any of it:
+The script now opens with `source("open_data.R")` (previously it had two bare `load()` calls and assumed everything else was already sitting in the R environment from other scripts run earlier in the same session). `open_data.R` loads every library, sources `Functions/age_strat_subinf_func_final.R` and `Functions/BurdenFunctions_v2.R`, and `load()`s every data object below from `MainData/`:
 
 | Object | Where it comes from |
 |---|---|
-| `all_age_infection`, `combined_burden` | `age_strat_burden_estim.R` (or the `Scripts/` copy) |
-| `bg_count_dist_wide` | An **external** file outside this repo: `../CHIK_MORBID/CHIK_MORBID/01_Data/calc_outputs/bg_count_dist_wide.RData`, loaded by scripts like `add_multimorbidity_rr.R` / `integrate_rr_fast.R` — never loaded by this script itself |
-| `hosp_sample`, `fatal_sample`, `nh_fatal_sample`, `lhs_sample_young` | `lhs_samples.R` (root) |
-| `calculate_comorbid_burden_step2` (and the now-unused `_step1`) | `Functions/BurdenFunctions_v2.R` |
-| `rr_hosp_model`, `allfoi` | Loaded directly at the top of this script from `MainData/rr_hosp_model.RData` and `MainData/allfoi_s1.RData` |
+| `all_age_infection` | `age_strat_burden_estim.R` (or the `Scripts/` copy) — saved to `MainData/all_age_infection.RData` |
+| `combined_burden` | `cookie_cut_map.R` (or the `Scripts/` copy) — saved to the repo root as `combined_burden_shrink.RData`, then copied into `MainData/` by hand |
+| `bg_count_dist_wide` | An **external** file outside this repo: `../CHIK_MORBID/CHIK_MORBID/01_Data/calc_outputs/bg_count_dist_wide.RData`, normally loaded by scripts like `add_multimorbidity_rr.R` / `integrate_rr_fast.R` — `open_data.R` expects a copy at `MainData/bg_count_dist_wide.RData` (not yet placed there as of 2026-07-14) |
+| `hosp_sample`, `fatal_sample`, `nh_fatal_sample`, `le_sample`, `lhs_sample_young`, `lhs_old` | `lhs_samples.R` (root) — saved directly to `MainData/` |
+| `calculate_comorbid_burden_step2` (and the now-unused `_step1`) | `Functions/BurdenFunctions_v2.R`, sourced by `open_data.R` |
+| `rr_hosp_model` | `MainData/rr_hosp_model.RData` — hand-curated literature RR table, no generating script in this repo |
+| `allfoi` | `MainData/allfoi_s1.RData` — produced by an upstream FOI/geostatistical modeling pipeline not visible in this repo |
 
-**Practical implication:** if you run this script fresh in a new R session without first running the scripts above, it will fail with "object not found." If you run it in a session where those objects are stale (left over from an earlier, different run), it will silently use outdated data with no warning — there's no version check or reload. Treat "which scripts ran, in which order, in this session" as part of the actual pipeline state.
+See `inst.md` for the full script/object dependency diagram.
+
+**Known data-quality issue, not fixed here (lives in a different file):** `lhs_samples.R` defines `fatal_sample` **twice** (once around line 346, once around line 381) with different `qbeta` formulas. Only the *first* definition is ever `save()`d to `MainData/fatal_sample.RData` (line 362) — the second, more carefully age-varying version is computed afterward and silently discarded (never saved, never used again). That means every fatal-burden number this script produces is built from the first, cruder formula (which also reuses the same `C[,5]` draw column for age groups 1–6, rather than a distinct column per group). If the fatality outputs look off, this is the first thing to check in `lhs_samples.R`.
+
+**Practical implication:** if `open_data.R`'s `load()` calls point at files that don't exist yet (e.g. `bg_count_dist_wide.RData` before it's copied into `MainData/`), the script fails immediately and loudly with "cannot open file" — which is safer than the old silent behavior of quietly reusing whatever was left in the R session from an earlier run.
+
+## Object-level data flow inside this script
+
+```mermaid
+flowchart TD
+    OPEN["open_data.R\n(all_age_infection, combined_burden,\nbg_count_dist_wide, hosp_sample,\nfatal_sample, nh_fatal_sample,\nrr_hosp_model, allfoi, lhs_sample_young)"]
+
+    POP["pop_5yr_long\n(population by 5yr band)"]
+    PREV["bg_prev_10yr\n(comorbidity prevalence by 10yr band)"]
+    INF["infection_comorb_long\n(infections split by comorbidity count)"]
+    RRSAMP["rr_hosp_sample_long\n(1,000 LHS RR draws)"]
+    ADJ["adjusted_hosp_rate\n(comorbidity-adjusted hosp. rate per run)"]
+    STEP2["comorbid_burden_step2\n(symptomatic/hosp./non-hosp./YLD per run)"]
+    PLOTDATA["comorbid_burden_plot"]
+    FATAL["comorbid_burden_fatal -> fatal_plot_data"]
+    FOIDT["country_foi\n(data.table FOI aggregation)"]
+    SURFACE["surface_country_summary\n(foi x multimorbidity x fatality; unused downstream in this script)"]
+
+    OPEN --> POP --> PREV
+    OPEN --> INF
+    PREV --> INF
+    OPEN --> RRSAMP
+    PREV --> ADJ
+    RRSAMP --> ADJ
+    OPEN --> ADJ
+
+    INF --> STEP2
+    ADJ --> STEP2
+    OPEN --> STEP2
+
+    STEP2 --> PLOTDATA
+    PLOTDATA --> P1["p_hospitalisation"]
+    PLOTDATA --> P2["p_region"]
+    PLOTDATA --> P3["p_spaghetti_hosp"]
+
+    STEP2 --> FATAL
+    OPEN --> FATAL
+    FATAL --> P4["p_fatal_burden"]
+
+    OPEN --> FOIDT
+    FATAL --> SURFACE
+    FOIDT --> SURFACE
+```
 
 ## Step-by-step
 
-1. **Setup (lines 1–70).** Loads two `.RData` files, defines a shared ggplot theme (`theme_lancet_clean`), and defines `age_crosswalk_9` — a 9-row lookup between `group` (1–9), `burden_age_group` (`"[0,10)"` … `"[80,90)"`), 10-year `age_start`/`age_end`, and the coarser 5-band `rr_age_group` (`"0–19"` … `"80+"`) used later to match RR estimates. This crosswalk is now the single source of truth for both mappings (previously the same two mappings were hand-typed via `case_when` in 4 separate places).
+1. **Setup (lines 1–70).** Sources `open_data.R` (which loads all libraries, functions, and data — see above), defines a shared ggplot theme (`theme_lancet_clean`), and defines `age_crosswalk_9` — a 9-row lookup between `group` (1–9), `burden_age_group` (`"[0,10)"` … `"[80,90)"`), 10-year `age_start`/`age_end`, and the coarser 5-band `rr_age_group` (`"0–19"` … `"80+"`) used later to match RR estimates. This crosswalk is now the single source of truth for both mappings (previously the same two mappings were hand-typed via `case_when` in 4 separate places).
 
 2. **Population reshaping (lines ~76–125).** Converts wide 5-year population columns into a long `pop_5yr_long` table keyed by `country` + `age_start`.
 
@@ -38,7 +87,7 @@ This script is not self-contained — it assumes a lot of state already sitting 
 
 8. **Hospitalisation plots (lines ~589–1123).** Builds `comorbid_burden_plot` (step2 output + population lookup), then produces, from filtered/aggregated versions of the same table: a global age×comorbidity plot (`p_hospitalisation`), a region-faceted version (`p_region`), and a "spaghetti" plot of all countries plus the global median/CI (`p_spaghetti_hosp`). These three blocks (plus two more below) repeat the same filter → factor → group-and-sum → group-and-summarise(median/CI) pattern with only the grouping keys changed — a good future candidate for a shared helper function, not changed in this pass since it's a larger refactor.
 
-9. **Fatal burden (lines ~1137–1355).** Applies `fatal_sample`/`nh_fatal_sample` (hospitalised/non-hospitalised fatality rates by age band) to the step2 output to get deaths, then builds `p_fatal_burden` the same way as the hospitalisation plots. Worth knowing: `lhs_samples.R` defines `fatal_sample` **twice** with different formulas (the second overwrites the first) — this script always gets whichever definition happened to execute last in that other file.
+9. **Fatal burden (lines ~1137–1355).** Applies `fatal_sample`/`nh_fatal_sample` (hospitalised/non-hospitalised fatality rates by age band) to the step2 output to get deaths, then builds `p_fatal_burden` the same way as the hospitalisation plots. See the "known data-quality issue" callout above — the `fatal_sample` values used here come from the cruder of two formulas defined in `lhs_samples.R`.
 
 10. **FOI aggregation (lines ~1358+, unrelated tangent).** Switches to `data.table` to compute a population-weighted country-level FOI (median + 95% CI across ~100 FOI draw columns) from `allfoi`, then merges it with the fatal-burden output into `surface_country_summary` — a country × broad-age-group table of FOI, multimorbidity prevalence, and fatality rate. This final object is **not plotted anywhere in this script**; it looks like an input prepared for a bubble/surface plot built elsewhere.
 
