@@ -8,7 +8,7 @@ Takes country-level chikungunya infection estimates (already split into 10-year 
 
 ## What must already exist before running this script
 
-The script now opens with `source("open_data.R")` (previously it had two bare `load()` calls and assumed everything else was already sitting in the R environment from other scripts run earlier in the same session). `open_data.R` loads every library, sources `Functions/age_strat_subinf_func_final.R` and `Functions/BurdenFunctions_v2.R`, and `load()`s every data object below from `MainData/`:
+The script opens with `source("open_data.R")`. `open_data.R` loads library, sources `Functions/age_strat_subinf_func_final.R` and `Functions/BurdenFunctions_v2.R`, and `load()`s every data object below from `MainData/`:
 
 | Object | Where it comes from |
 |---|---|
