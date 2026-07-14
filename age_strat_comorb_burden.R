@@ -129,32 +129,12 @@ pop_5yr_long <- pop_5yr |>
   )
 
 ## 3. Attach comorbidity prevalence data to population, harmonise on iso3 -
-##    (a country_name-keyed join is tried first, then superseded below by
-##    an iso3-keyed join once the iso3 crosswalk is available)
+##    (joined on iso3 below, once the iso3 crosswalk is available)
 bg_count_dist_0_89 <- bg_count_dist_wide |>
   dplyr::filter(!is.na(burden_age_group))
 
-bg_count_with_pop <- bg_count_dist_0_89 |>
-  dplyr::left_join(
-    pop_5yr_long |>
-      dplyr::select(
-        country,
-        age_start,
-        population
-      ),
-    by = c(
-      "country_name" = "country",
-      "age_start" = "age_start"
-    )
-  )
-
-bg_count_dist_analysis <- bg_count_dist_0_89 |>
-  dplyr::semi_join(
-    pop_5yr_long |>
-      dplyr::distinct(country),
-    by = c("country_name" = "country")
-  )
-
+## Diagnostic: which countries have infection estimates but no comorbidity
+## prevalence data at all (printed, not used further downstream).
 missing_from_bg <- all_age_infection |>
   dplyr::distinct(country) |>
   dplyr::anti_join(
@@ -208,21 +188,6 @@ bg_count_with_pop <- bg_count_dist_0_89 |>
       "iso3",
       "age_start"
     )
-  )
-
-bg_regional_prev <- bg_count_dist_0_89 |>
-  dplyr::group_by(
-    region,
-    age_start,
-    age_end,
-    burden_age_group
-  ) |>
-  dplyr::summarise(
-    prev_comorb_0 = mean(prev_comorb_0, na.rm = TRUE),
-    prev_comorb_1 = mean(prev_comorb_1, na.rm = TRUE),
-    prev_comorb_2 = mean(prev_comorb_2, na.rm = TRUE),
-    prev_comorb_3plus = mean(prev_comorb_3plus, na.rm = TRUE),
-    .groups = "drop"
   )
 
 bg_prev_10yr <- bg_count_with_pop |>
@@ -356,15 +321,6 @@ rr_hosp_model_unique <- rr_hosp_model |>
     rr_age_group,
     comorbidity,
     .keep_all = TRUE
-  )
-
-infection_comorb_rr <- infection_comorb_long |>
-  dplyr::left_join(
-    rr_hosp_model_unique,
-    by = c(
-      "rr_age_group",
-      "comorbidity"
-    )
   )
 
 ## 6. Draw 1,000 LHS samples of comorbidity-specific hospitalisation RR ----
@@ -540,12 +496,6 @@ adjusted_hosp_rate <- prev_rr_hosp_long |>
 analysis_iso3 <- all_age_infection |>
   dplyr::distinct(iso3) |>
   dplyr::filter(!is.na(iso3))
-
-prev_comorb_long_103 <- prev_comorb_long |>
-  dplyr::semi_join(
-    analysis_iso3,
-    by = "iso3"
-  )
 
 adjusted_hosp_rate_103 <- adjusted_hosp_rate |>
   dplyr::semi_join(
@@ -763,6 +713,8 @@ p_hospitalisation <- ggplot(
     colour = "Number of comorbidities"
   ) +
   theme_lancet_clean()
+
+p_hospitalisation
 
 
 ## 11. Hospitalisation plot: region-faceted -------------------------------
@@ -1404,28 +1356,19 @@ country_foi_draws <- foi_dt_valid[
   .SDcols = foi_cols
 ]
 
+## Vectorized median/quantile across the ~100 foi draw columns, computed
+## once on a plain matrix instead of row-by-row via dplyr::rowwise()
+## (rowwise() rebuilds a mini-tibble per row; apply() on a matrix avoids
+## that overhead entirely).
+foi_matrix <- as.matrix(country_foi_draws[, ..foi_cols])
+
 country_foi <- country_foi_draws |>
   dplyr::as_tibble() |>
-  dplyr::rowwise() |>
   dplyr::mutate(
-    foi = median(
-      c_across(dplyr::all_of(foi_cols)),
-      na.rm = TRUE
-    ),
-    
-    foi_lower = quantile(
-      c_across(dplyr::all_of(foi_cols)),
-      0.025,
-      na.rm = TRUE
-    ),
-    
-    foi_upper = quantile(
-      c_across(dplyr::all_of(foi_cols)),
-      0.975,
-      na.rm = TRUE
-    )
+    foi = apply(foi_matrix, 1, median, na.rm = TRUE),
+    foi_lower = apply(foi_matrix, 1, quantile, probs = 0.025, na.rm = TRUE),
+    foi_upper = apply(foi_matrix, 1, quantile, probs = 0.975, na.rm = TRUE)
   ) |>
-  dplyr::ungroup() |>
   dplyr::select(
     iso3,
     country,
@@ -1518,6 +1461,9 @@ surface_data_by_run <- surface_data_by_run |>
     relationship = "many-to-one"
   )
 
+## This is the final object this script produces. As of this pass it is
+## not printed/saved/plotted here — add a print()/ggsave()/write step if
+## you expect to consume it from this script rather than another one.
 surface_country_summary <- surface_data_by_run |>
   dplyr::filter(
     is.finite(foi),

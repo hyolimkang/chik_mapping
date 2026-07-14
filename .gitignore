@@ -1,0 +1,17 @@
+# ---- R / RStudio ----
+.Rproj.user/
+.Rhistory
+.RData
+.RDataTmp*
+.Ruserdata
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Large data (too big for GitHub, kept out of git) ----
+MainData/*.RData
+MainData/*.RDS
+MainData/*.rds
+*.RData
+*.rds
