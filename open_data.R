@@ -5,14 +5,25 @@
 ## scripts assume already exist in the environment.
 
 ## 1. Libraries --------------------------------------------------------
+## Core data wrangling / analysis
 library(dplyr)
 library(tidyr)
-library(ggplot2)
 library(tibble)
-library(scales)
-library(readxl)
-library(lhs)
 library(data.table)
+
+## Sampling (LHS Monte Carlo draws)
+library(lhs)
+
+## Reading external data
+library(readxl)
+
+## Plotting (used by age_strat_comorb_burden.R and by the plotting helpers
+## in Functions/BurdenFunctions_v2.R)
+library(ggplot2)
+library(scales)
+library(ggthemes)
+library(paletteer)
+library(tidyterra)
 
 ## 2. Shared function definitions ---------------------------------------
 source("Functions/age_strat_subinf_func_final.R")
