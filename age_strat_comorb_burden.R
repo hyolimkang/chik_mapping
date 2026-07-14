@@ -326,7 +326,8 @@ infection_comorb <- infection_with_prev |>
       infections * prev_comorb_3plus
   )
 
-##
+## 5. Split infections by comorbidity count and attach the coarser
+##    rr_age_group banding needed to match RR estimates -------------------
 infection_comorb <- infection_comorb |>
   dplyr::left_join(
     age_crosswalk_9 |>
@@ -366,7 +367,8 @@ infection_comorb_rr <- infection_comorb_long |>
     )
   )
 
-###
+## 6. Draw 1,000 LHS samples of comorbidity-specific hospitalisation RR ----
+##    (log-normal fit to point estimate + 95% CI; reference strata fixed at 1)
 sample_rr_lhs <- function(rr_df, estimate_col, lower_col, upper_col,
                           runs = 1000, seed = 123) {
   
@@ -505,6 +507,11 @@ prev_rr_hosp_long <- prev_rr_long |>
     relationship = "many-to-one"
   )
 
+## 7. Back-calculate a comorbidity-adjusted hospitalisation rate ----------
+##    hosp_sample gives a marginal (population-average) rate per age band;
+##    weighted_rr reconstructs that average from the comorbidity-specific
+##    RR draws, then marginal/weighted_rr backs out an implied "reference"
+##    (comorbidity-free) rate that is multiplied by each stratum's own RR.
 adjusted_hosp_rate <- prev_rr_hosp_long |>
   dplyr::group_by(
     iso3,
@@ -546,6 +553,9 @@ adjusted_hosp_rate_103 <- adjusted_hosp_rate |>
     by = "iso3"
   )
 
+## 8. Compute the full comorbidity-stratified burden for every run --------
+##    (symptomatic -> hospitalised/non-hospitalised -> acute/subacute/
+##    chronic splits -> YLDs; see Functions/BurdenFunctions_v2.R)
 comorbid_burden_step2 <-
   calculate_comorbid_burden_step2(
     infection_comorb_long =
@@ -559,7 +569,7 @@ comorbid_burden_step2 <-
   )
 
 
-###
+## 9. Shared factor levels and the joined plotting table ------------------
 age_levels <- c(
   "[0,10)",
   "[10,20)",
@@ -599,6 +609,7 @@ comorbid_burden_plot <- comorbid_burden_step2 |>
     relationship = "many-to-one"
   )
 
+## 10. Hospitalisation plot: global, by age band x comorbidity -----------
 plot_by_run <- comorbid_burden_plot |>
   dplyr::filter(
     !is.na(adjusted_hosp_rate),
@@ -754,6 +765,7 @@ p_hospitalisation <- ggplot(
   theme_lancet_clean()
 
 
+## 11. Hospitalisation plot: region-faceted -------------------------------
 plot_region_by_run <- comorbid_burden_plot |>
   dplyr::filter(
     !is.na(adjusted_hosp_rate),
@@ -886,6 +898,7 @@ p_region <- ggplot(
 
 p_region
 
+## 12. Hospitalisation plot: per-country "spaghetti" + global median/CI --
 country_hosp_by_run <- comorbid_burden_plot |>
   dplyr::filter(
     !is.na(adjusted_hosp_rate),
@@ -1110,6 +1123,7 @@ p_spaghetti_hosp <- ggplot2::ggplot() +
 p_spaghetti_hosp
 
 
+# NOTE: region_colours is currently defined but unused in this script.
 region_colours <- c(
   "East Asia & Pacific" = "#00468B",
   "Europe & Central Asia" = "#0099B4",
@@ -1121,7 +1135,9 @@ region_colours <- c(
 )
 
 
-#######
+## 13. Fatal burden: apply hospitalised/non-hospitalised fatality rates --
+##     (note: lhs_samples.R defines fatal_sample twice with different
+##     formulas — this uses whichever definition ran last in that script)
 fatal_sample_long <- fatal_sample |>
   dplyr::mutate(
     run = dplyr::row_number()
@@ -1343,7 +1359,9 @@ p_fatal_burden <- ggplot2::ggplot(
 p_fatal_burden
 
 
-###
+## 14. FOI aggregation (separate from the comorbidity burden above) ------
+##     Country-level force-of-infection summary (median + 95% CI across
+##     ~100 FOI draw columns), computed with data.table for speed.
 library(data.table)
 
 foi_dt <- as.data.table(allfoi)
@@ -1420,6 +1438,10 @@ country_foi <- country_foi_draws |>
   )
 
 
+## 15. Merge FOI with the fatal burden into a country x broad-age-group
+##     table (foi x multimorbidity prevalence x fatality rate). This is
+##     not plotted in this script — it looks like input prepared for a
+##     bubble/surface plot built elsewhere.
 surface_data_by_run <- fatal_plot_data |>
   dplyr::filter(
     !is.na(fatal),
