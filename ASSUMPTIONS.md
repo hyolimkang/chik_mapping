@@ -90,9 +90,7 @@ or continent but not by age or comorbidity count.
 The implemented assumption is therefore:
 
 $$
-P(Y=1\mid I=1,r,a,c)
-=
-P(Y=1\mid I=1,r).
+P(Y=1\mid I=1,r,a,c) = P(Y=1\mid I=1,r).
 $$
 
 In particular, comorbidity is assumed not to affect the probability of
@@ -117,9 +115,7 @@ where $S=1$ indicates inclusion as a reported SINAN case.
 The model allows the age-risk relationship to vary by comorbidity count:
 
 $$
-\text{logit}\{P(H=1)\}
-=
-\alpha_c + f_c(age) + \beta_{\mathrm{sex}}sex.
+\text{logit}\{P(H=1)\} = \alpha_c + f_c(age) + \beta_{\mathrm{sex}}sex.
 $$
 
 Predicted hospitalisation probabilities are standardised within each
@@ -138,13 +134,7 @@ $$
 The age-specific risk ratio is then:
 
 $$
-RR_{a,c}
-=
-\frac{
-\bar p^{SINAN}_{a,c}
-}{
-\bar p^{SINAN}_{a,0}
-}.
+RR_{a,c} = \frac{\bar p^{SINAN}_{a,c}}{\bar p^{SINAN}_{a,0}}.
 $$
 
 The no-comorbidity group is the reference and therefore has
@@ -158,33 +148,19 @@ not country-specific.
 The SINAN analysis estimates:
 
 $$
-RR^{SINAN}_{a,c}
-=
-\frac{
-P(H=1\mid S=1,a,c)
-}{
-P(H=1\mid S=1,a,c=0)
-}.
+RR^{SINAN}_{a,c} = \frac{P(H=1\mid S=1,a,c)}{P(H=1\mid S=1,a,c=0)}.
 $$
 
 The burden model requires:
 
 $$
-RR^{target}_{a,c}
-=
-\frac{
-P(H=1\mid symptomatic,a,c)
-}{
-P(H=1\mid symptomatic,a,c=0)
-}.
+RR^{target}_{a,c} = \frac{P(H=1\mid symptomatic,a,c)}{P(H=1\mid symptomatic,a,c=0)}.
 $$
 
 The primary transportability assumption is:
 
 $$
-RR^{SINAN}_{a,c}
-\approx
-RR^{target}_{a,c}.
+RR^{SINAN}_{a,c} \approx RR^{target}_{a,c}.
 $$
 
 In words, age-specific hospitalisation risk ratios estimated among
@@ -211,9 +187,7 @@ stratified jointly by:
 Let:
 
 $$
-m_a
-=
-P(H=1\mid symptomatic,a)
+m_a = P(H=1\mid symptomatic,a)
 $$
 
 denote the externally derived age-specific marginal hospitalisation
@@ -232,36 +206,26 @@ across comorbidity groups.
 For country $j$ and age group $a$, the prevalence-weighted risk ratio is:
 
 $$
-W_{j,a}
-=
-\sum_c
-\pi_{j,a,c}RR_{a,c}.
+W_{j,a} = \sum_c \pi_{j,a,c}RR_{a,c}.
 $$
 
 The implied hospitalisation probability for the no-comorbidity reference
 group is:
 
 $$
-p_{j,a,0}
-=
-\frac{m_a}{W_{j,a}}.
+p_{j,a,0} = \frac{m_a}{W_{j,a}}.
 $$
 
 The hospitalisation probability for each comorbidity group is:
 
 $$
-p_{j,a,c}
-=
-p_{j,a,0}RR_{a,c}.
+p_{j,a,c} = p_{j,a,0}RR_{a,c}.
 $$
 
 This calibration ensures that:
 
 $$
-\sum_c
-\pi_{j,a,c}p_{j,a,c}
-=
-m_a.
+\sum_c \pi_{j,a,c}p_{j,a,c} = m_a.
 $$
 
 Therefore, separating the population into comorbidity groups does not
@@ -283,17 +247,13 @@ being silently truncated.
 Hospitalised cases within each comorbidity group are calculated as:
 
 $$
-H_{j,a,c}
-=
-Y_{j,a,c}p_{j,a,c}.
+H_{j,a,c} = Y_{j,a,c}p_{j,a,c}.
 $$
 
 The total number of hospitalised cases in an age group is:
 
 $$
-H_{j,a}
-=
-\sum_c H_{j,a,c}.
+H_{j,a} = \sum_c H_{j,a,c}.
 $$
 
 Because the weighted-RR calibration preserves the marginal hospitalisation
@@ -306,29 +266,13 @@ For the stacked burden figure, each comorbidity group's contribution is
 calculated using the same total age-group population as the denominator:
 
 $$
-B_{j,a,c}
-=
-\frac{
-H_{j,a,c}
-}{
-N_{j,a}
-}
-\times10{,}000.
+B_{j,a,c} = \frac{H_{j,a,c}}{N_{j,a}} \times10{,}000.
 $$
 
 The total height of the stacked bar is:
 
 $$
-B_{j,a}
-=
-\sum_c B_{j,a,c}
-=
-\frac{
-H_{j,a}
-}{
-N_{j,a}
-}
-\times10{,}000.
+B_{j,a} = \sum_c B_{j,a,c} = \frac{H_{j,a}}{N_{j,a}} \times10{,}000.
 $$
 
 Thus, the total bar height represents the overall hospitalisation burden
@@ -347,12 +291,7 @@ comorbidity-specific probability with a counterfactual probability under
 no comorbidity:
 
 $$
-H^{excess}_{j,a,c}
-=
-Y_{j,a,c}
-\left(
-p_{j,a,c}-p_{j,a,0}
-\right).
+H^{excess}_{j,a,c} = Y_{j,a,c} \left( p_{j,a,c}-p_{j,a,0} \right).
 $$
 
 Such an interpretation would require stronger causal assumptions,
