@@ -3,6 +3,8 @@
 ##    bg_count_dist_wide, hosp_sample, fatal_sample, nh_fatal_sample,
 ##    lhs_sample_young, etc.)
 source("open_data.R")
+options(scipen = 999)
+
 
 ## 1. Shared ggplot theme for all figures in this script ------------------
 theme_lancet_clean <- function(base_size = 11) {
@@ -50,32 +52,34 @@ theme_lancet_clean <- function(base_size = 11) {
     )
 }
 
-age_crosswalk_9 <- tibble::tibble(
-  group = 1:9,
-  burden_age_group = c(
-    "[0,10)",
-    "[10,20)",
-    "[20,30)",
-    "[30,40)",
-    "[40,50)",
-    "[50,60)",
-    "[60,70)",
-    "[70,80)",
-    "[80,90)"
-  ),
-  age_start = seq(0, 80, by = 10),
-  age_end = seq(9, 89, by = 10),
-  rr_age_group = c(
-    "0–19", "0–19",
-    "20–39", "20–39",
-    "40–59", "40–59",
-    "60–79", "60–79",
-    "80+"
-  )
-)
+## ============================================================
+## 1. Create a clean country-to-ISO3 lookup
+## ============================================================
 
-age_crosswalk_9
+country_iso3 <- combined_burden |>
+  dplyr::transmute(
+    country = as.character(country),
+    iso3 = as.character(iso3)
+  ) |>
+  dplyr::filter(
+    !is.na(country),
+    !is.na(iso3),
+    country != "",
+    iso3 != ""
+  ) |>
+  dplyr::distinct()
 
+country_iso3 <- country_iso3 |>
+  dplyr::filter(
+    country != "France"
+  ) |>
+  dplyr::bind_rows(
+    tibble::tibble(
+      country = "France",
+      iso3 = "FRA"
+    )
+  ) |>
+  dplyr::distinct()
 ## 2. Reshape population into 5-year age bands ----------------------------
 pop_5yr <- all_age_infection |>
   dplyr::transmute(
@@ -128,67 +132,199 @@ pop_5yr_long <- pop_5yr |>
     )
   )
 
-## 3. Attach comorbidity prevalence data to population, harmonise on iso3 -
-##    (joined on iso3 below, once the iso3 crosswalk is available)
+## 3. Attach comorbidity prevalence data to population,
+##    harmonising countries using ISO3 -------------------------------
+## 3.1 Keep comorbidity-prevalence rows with valid burden age groups
 bg_count_dist_0_89 <- bg_count_dist_wide |>
-  dplyr::filter(!is.na(burden_age_group))
-
-## Diagnostic: which countries have infection estimates but no comorbidity
-## prevalence data at all (printed, not used further downstream).
-missing_from_bg <- all_age_infection |>
-  dplyr::distinct(country) |>
-  dplyr::anti_join(
-    bg_count_dist_0_89 |>
-      dplyr::distinct(country_name),
-    by = c("country" = "country_name")
+  dplyr::filter(
+    !is.na(burden_age_group)
   )
 
-missing_from_bg
 
+## 3.2 Create a clean country-to-ISO3 lookup
 country_iso3 <- combined_burden |>
-  dplyr::distinct(
+  dplyr::transmute(
+    country = as.character(country),
+    iso3 = as.character(iso3)
+  ) |>
+  dplyr::filter(
+    !is.na(country),
+    !is.na(iso3),
+    country != "",
+    iso3 != ""
+  ) |>
+  dplyr::filter(
+    country != "France"
+  ) |>
+  dplyr::distinct() |>
+  dplyr::bind_rows(
+    tibble::tibble(
+      country = "France",
+      iso3 = "FRA"
+    )
+  ) |>
+  dplyr::distinct()
+
+
+## Check that each country maps to only one ISO3
+duplicate_country_iso3 <- country_iso3 |>
+  dplyr::count(
     country,
-    iso3
+    name = "n_iso3"
+  ) |>
+  dplyr::filter(
+    n_iso3 > 1
   )
 
-all_age_infection <- all_age_infection |>
+if (nrow(duplicate_country_iso3) > 0) {
+  print(duplicate_country_iso3)
+  
+  stop(
+    "Some countries are linked to more than one ISO3 code."
+  )
+}
+
+
+## 3.3 Attach ISO3 to infection data
+##     Do not overwrite all_age_infection
+infection_with_iso3 <- all_age_infection |>
+  dplyr::select(
+    -dplyr::any_of(
+      c(
+        "iso3",
+        "iso3.x",
+        "iso3.y"
+      )
+    )
+  ) |>
   dplyr::left_join(
     country_iso3,
     by = "country",
     relationship = "many-to-one"
   )
 
-all_age_infection <- all_age_infection |>
-  dplyr::mutate(
-    iso3 = dplyr::if_else(
-      country == "France",
-      "FRA",
-      iso3
-    )
+
+## Diagnostic 1:
+## countries in infection data that could not be assigned an ISO3
+missing_iso3 <- infection_with_iso3 |>
+  dplyr::filter(
+    is.na(iso3)
+  ) |>
+  dplyr::distinct(
+    country
   )
 
-pop_5yr_long <- pop_5yr_long |>
+missing_iso3
+
+
+## Diagnostic 2:
+## countries with infection estimates but no comorbidity prevalence
+missing_from_bg <- infection_with_iso3 |>
+  dplyr::filter(
+    !is.na(iso3)
+  ) |>
+  dplyr::distinct(
+    country,
+    iso3
+  ) |>
+  dplyr::anti_join(
+    bg_count_dist_0_89 |>
+      dplyr::filter(
+        !is.na(iso3)
+      ) |>
+      dplyr::distinct(
+        iso3
+      ),
+    by = "iso3"
+  )
+
+missing_from_bg
+
+
+## 3.4 Attach ISO3 to the five-year population data
+##     Do not overwrite pop_5yr_long
+pop_5yr_long_with_iso3 <- pop_5yr_long |>
+  dplyr::select(
+    -dplyr::any_of(
+      c(
+        "iso3",
+        "iso3.x",
+        "iso3.y"
+      )
+    )
+  ) |>
   dplyr::left_join(
-    all_age_infection |>
-      dplyr::distinct(country, iso3),
+    infection_with_iso3 |>
+      dplyr::distinct(
+        country,
+        iso3
+      ),
     by = "country",
     relationship = "many-to-one"
   )
 
 
+## 3.5 Create a unique population lookup table
+population_lookup <- pop_5yr_long_with_iso3 |>
+  dplyr::filter(
+    !is.na(iso3),
+    !is.na(age_start)
+  ) |>
+  dplyr::select(
+    iso3,
+    age_start,
+    population
+  ) |>
+  dplyr::distinct()
+
+
+## Check that each ISO3-age combination has only one population value
+duplicate_population_keys <- population_lookup |>
+  dplyr::count(
+    iso3,
+    age_start,
+    name = "n"
+  ) |>
+  dplyr::filter(
+    n > 1
+  )
+
+if (nrow(duplicate_population_keys) > 0) {
+  print(duplicate_population_keys)
+  
+  stop(
+    "More than one population value exists for some ISO3-age combinations."
+  )
+}
+
+
+## 3.6 Attach population to comorbidity-prevalence data
 bg_count_with_pop <- bg_count_dist_0_89 |>
   dplyr::left_join(
-    pop_5yr_long |>
-      dplyr::select(
-        iso3,
-        age_start,
-        population
-      ),
+    population_lookup,
     by = c(
       "iso3",
       "age_start"
-    )
+    ),
+    relationship = "many-to-one"
   )
+
+
+## Diagnostic 3:
+## comorbidity-prevalence rows for which population was not matched
+missing_population <- bg_count_with_pop |>
+  dplyr::filter(
+    is.na(population)
+  ) |>
+  dplyr::distinct(
+    iso3,
+    country_name,
+    age_start,
+    burden_age_group
+  )
+
+missing_population
+
 
 bg_prev_10yr <- bg_count_with_pop |>
   dplyr::filter(
@@ -215,14 +351,8 @@ bg_prev_10yr <- bg_count_with_pop |>
       na.rm = TRUE
     ),
     
-    prev_comorb_2 = weighted.mean(
-      prev_comorb_2,
-      w = population,
-      na.rm = TRUE
-    ),
-    
-    prev_comorb_3plus = weighted.mean(
-      prev_comorb_3plus,
+    prev_comorb_2plus = weighted.mean(
+      prev_comorb_2plus,
       w = population,
       na.rm = TRUE
     ),
@@ -232,7 +362,8 @@ bg_prev_10yr <- bg_count_with_pop |>
 
 ## 4. Reshape total infections into 10-year age bands and attach
 ##    comorbidity prevalence ------------------------------------------------
-infection_10yr_long <- all_age_infection |>
+infection_10yr_long <- infection_with_iso3 |>
+  dplyr::filter(!is.na(iso3)) |>
   dplyr::select(
     iso3,
     country,
@@ -251,7 +382,10 @@ infection_10yr_long <- all_age_infection |>
   ) |>
   dplyr::left_join(
     age_crosswalk_9 |>
-      dplyr::select(group_number = group, burden_age_group),
+      dplyr::transmute(
+        group_number = as.integer(group),
+        burden_age_group
+      ),
     by = "group_number",
     relationship = "many-to-one"
   )
@@ -267,8 +401,7 @@ infection_with_prev <- infection_10yr_long_0_79 |>
         burden_age_group,
         prev_comorb_0,
         prev_comorb_1,
-        prev_comorb_2,
-        prev_comorb_3plus
+        prev_comorb_2plus
       ),
     by = c(
       "iso3",
@@ -284,11 +417,8 @@ infection_comorb <- infection_with_prev |>
     infections_comorb_1 =
       infections * prev_comorb_1,
     
-    infections_comorb_2 =
-      infections * prev_comorb_2,
-    
-    infections_comorb_3plus =
-      infections * prev_comorb_3plus
+    infections_comorb_2plus =
+      infections * prev_comorb_2plus
   )
 
 ## 5. Split infections by comorbidity count and attach the coarser
@@ -296,10 +426,14 @@ infection_comorb <- infection_with_prev |>
 infection_comorb <- infection_comorb |>
   dplyr::left_join(
     age_crosswalk_9 |>
-      dplyr::select(group_number = group, rr_age_group),
+      dplyr::transmute(
+        group_number = group,
+        rr_age_group = burden_age_group
+      ),
     by = "group_number",
     relationship = "many-to-one"
   )
+
 infection_comorb_long <- infection_comorb |>
   tidyr::pivot_longer(
     cols = dplyr::starts_with("infections_comorb_"),
@@ -311,8 +445,7 @@ infection_comorb_long <- infection_comorb |>
       comorbidity,
       infections_comorb_0 = "0",
       infections_comorb_1 = "1",
-      infections_comorb_2 = "2",
-      infections_comorb_3plus = "3+"
+      infections_comorb_2plus = "2+"
     )
   )
 
@@ -404,8 +537,7 @@ prev_comorb_long <- bg_prev_10yr |>
     cols = c(
       prev_comorb_0,
       prev_comorb_1,
-      prev_comorb_2,
-      prev_comorb_3plus
+      prev_comorb_2plus
     ),
     names_to = "comorbidity",
     values_to = "prevalence"
@@ -415,15 +547,14 @@ prev_comorb_long <- bg_prev_10yr |>
       comorbidity,
       prev_comorb_0 = "0",
       prev_comorb_1 = "1",
-      prev_comorb_2 = "2",
-      prev_comorb_3plus = "3+"
+      prev_comorb_2plus = "2+"
     )
   )
 
 prev_comorb_long <- prev_comorb_long |>
   dplyr::left_join(
     age_crosswalk_9 |>
-      dplyr::select(burden_age_group, group_number = group, rr_age_group),
+      dplyr::select(burden_age_group, group_number = group, burden_age_group),
     by = "burden_age_group",
     relationship = "many-to-one"
   )
@@ -431,10 +562,7 @@ prev_comorb_long <- prev_comorb_long |>
 prev_rr_long <- prev_comorb_long |>
   dplyr::inner_join(
     rr_hosp_sample_long,
-    by = c(
-      "rr_age_group",
-      "comorbidity"
-    ),
+    by = c("burden_age_group" = "rr_age_group", "comorbidity"),
     relationship = "many-to-many"
   )
 
@@ -493,7 +621,7 @@ adjusted_hosp_rate <- prev_rr_hosp_long |>
   ) |>
   dplyr::ungroup()
 
-analysis_iso3 <- all_age_infection |>
+analysis_iso3 <- infection_with_iso3  |>
   dplyr::distinct(iso3) |>
   dplyr::filter(!is.na(iso3))
 
@@ -503,593 +631,48 @@ adjusted_hosp_rate_103 <- adjusted_hosp_rate |>
     by = "iso3"
   )
 
-## 8. Compute the full comorbidity-stratified burden for every run --------
-##    (symptomatic -> hospitalised/non-hospitalised -> acute/subacute/
-##    chronic splits -> YLDs; see Functions/BurdenFunctions_v2.R)
-comorbid_burden_step2 <-
-  calculate_comorbid_burden_step2(
-    infection_comorb_long =
-      infection_comorb_long,
-    
-    adjusted_hosp_rate =
-      adjusted_hosp_rate_103,
-    
-    lhs_sample =
-      lhs_sample_young
+## 8. Construct comorbidity-specific fatality rates ----------------------
+
+rr_death_model_unique <- rr_death_model |>
+  dplyr::distinct(
+    rr_age_group,
+    comorbidity,
+    .keep_all = TRUE
   )
 
-
-## 9. Shared factor levels and the joined plotting table ------------------
-age_levels <- c(
-  "[0,10)",
-  "[10,20)",
-  "[20,30)",
-  "[30,40)",
-  "[40,50)",
-  "[50,60)",
-  "[60,70)",
-  "[70,80)"
+rr_death_sample <- sample_rr_lhs(
+  rr_df = rr_death_model_unique,
+  estimate_col = "rr_death",
+  lower_col = "rr_death_lo",
+  upper_col = "rr_death_hi",
+  runs = 1000,
+  seed = 456
 )
 
-comorb_levels <- c("0", "1", "2", "3+")
-
-population_lookup <- prev_comorb_long |>
-  dplyr::select(
-    iso3,
-    burden_age_group,
-    group_number,
-    comorbidity,
-    population_10yr,
-    prevalence
+rr_death_sample_long <- rr_death_sample |>
+  dplyr::mutate(
+    run = dplyr::row_number()
   ) |>
-  dplyr::distinct()
-
-comorbid_burden_plot <- comorbid_burden_step2 |>
-  dplyr::select(
-    -dplyr::any_of(c("population_10yr", "prevalence"))
-  ) |>
-  dplyr::left_join(
-    population_lookup,
-    by = c(
-      "iso3",
-      "burden_age_group",
-      "group_number",
+  tidyr::pivot_longer(
+    cols = -run,
+    names_to = c(
+      "rr_age_group",
       "comorbidity"
     ),
-    relationship = "many-to-one"
+    names_sep = "__",
+    values_to = "rr_death_draw"
   )
 
-## 10. Hospitalisation plot: global, by age band x comorbidity -----------
-plot_by_run <- comorbid_burden_plot |>
-  dplyr::filter(
-    !is.na(adjusted_hosp_rate),
-    !is.na(population_10yr),
-    !is.na(prevalence),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    burden_age_group = factor(
-      burden_age_group,
-      levels = age_levels
+prev_death_rr_long <- prev_comorb_long |>
+  dplyr::inner_join(
+    rr_death_sample_long,
+    by = c(
+      "burden_age_group" = "rr_age_group",
+      "comorbidity"
     ),
-    comorbidity = factor(
-      comorbidity,
-      levels = comorb_levels
-    ),
-    subgroup_population =
-      population_10yr * prevalence
-  ) |>
-  dplyr::group_by(
-    run,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    symptomatic = sum(
-      symptomatic,
-      na.rm = TRUE
-    ),
-    hospitalised = sum(
-      hospitalised,
-      na.rm = TRUE
-    ),
-    subgroup_population = sum(
-      subgroup_population,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    symptomatic_rate_100k =
-      symptomatic /
-      subgroup_population *
-      100000,
-    
-    hospitalisation_rate_10k =
-      hospitalised /
-      subgroup_population *
-      10000
+    relationship = "many-to-many"
   )
 
-
-plot_summary <- plot_by_run |>
-  dplyr::group_by(
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    symptomatic_median =
-      median(
-        symptomatic_rate_100k,
-        na.rm = TRUE
-      ),
-    
-    symptomatic_lower =
-      quantile(
-        symptomatic_rate_100k,
-        0.025,
-        na.rm = TRUE
-      ),
-    
-    symptomatic_upper =
-      quantile(
-        symptomatic_rate_100k,
-        0.975,
-        na.rm = TRUE
-      ),
-    
-    hospitalisation_median =
-      median(
-        hospitalisation_rate_10k,
-        na.rm = TRUE
-      ),
-    
-    hospitalisation_lower =
-      quantile(
-        hospitalisation_rate_10k,
-        0.025,
-        na.rm = TRUE
-      ),
-    
-    hospitalisation_upper =
-      quantile(
-        hospitalisation_rate_10k,
-        0.975,
-        na.rm = TRUE
-      ),
-    
-    .groups = "drop"
-  )
-
-comorb_colours <- c(
-  "0"  = "#ADB6B6",
-  "1"  = "#0099B4",
-  "2"  = "#00468B",
-  "3+" = "#ED0000"
-)
-
-p_hospitalisation <- ggplot(
-  plot_summary,
-  aes(
-    x = burden_age_group,
-    y = hospitalisation_median,
-    colour = comorbidity,
-    group = comorbidity
-  )
-) +
-  geom_errorbar(
-    aes(
-      ymin = hospitalisation_lower,
-      ymax = hospitalisation_upper
-    ),
-    width = 0.12,
-    linewidth = 0.45,
-    alpha = 0.8
-  ) +
-  geom_line(
-    linewidth = 0.9
-  ) +
-  geom_point(
-    size = 2.5,
-    stroke = 0.3
-  ) +
-  scale_colour_manual(
-    values = comorb_colours,
-    drop = FALSE
-  ) +
-  scale_y_continuous(
-    labels = scales::label_number(
-      accuracy = 0.1,
-      big.mark = ","
-    ),
-    expand = ggplot2::expansion(
-      mult = c(0, 0.08)
-    )
-  ) +
-  labs(
-    title = "Hospitalisation",
-    x = "Age group, years",
-    y = "Hospitalised cases per 10,000\nsubgroup population",
-    colour = "Number of comorbidities"
-  ) +
-  theme_lancet_clean()
-
-p_hospitalisation
-
-
-## 11. Hospitalisation plot: region-faceted -------------------------------
-plot_region_by_run <- comorbid_burden_plot |>
-  dplyr::filter(
-    !is.na(adjusted_hosp_rate),
-    !is.na(population_10yr),
-    !is.na(prevalence),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    burden_age_group = factor(
-      burden_age_group,
-      levels = age_levels
-    ),
-    comorbidity = factor(
-      comorbidity,
-      levels = comorb_levels
-    ),
-    subgroup_population =
-      population_10yr * prevalence
-  ) |>
-  dplyr::group_by(
-    continent,
-    run,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    symptomatic =
-      sum(symptomatic, na.rm = TRUE),
-    
-    hospitalised =
-      sum(hospitalised, na.rm = TRUE),
-    
-    subgroup_population =
-      sum(subgroup_population, na.rm = TRUE),
-    
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    hospitalisation_rate_10k =
-      hospitalised /
-      subgroup_population *
-      10000
-  )
-
-plot_region_summary <- plot_region_by_run |>
-  dplyr::group_by(
-    continent,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    median =
-      median(
-        hospitalisation_rate_10k,
-        na.rm = TRUE
-      ),
-    
-    lower =
-      quantile(
-        hospitalisation_rate_10k,
-        0.025,
-        na.rm = TRUE
-      ),
-    
-    upper =
-      quantile(
-        hospitalisation_rate_10k,
-        0.975,
-        na.rm = TRUE
-      ),
-    
-    .groups = "drop"
-  )
-
-
-p_region <- ggplot(
-  plot_region_summary,
-  aes(
-    x = burden_age_group,
-    y = median,
-    colour = comorbidity,
-    group = comorbidity
-  )
-) +
-  geom_errorbar(
-    aes(
-      ymin = lower,
-      ymax = upper
-    ),
-    width = 0.1,
-    linewidth = 0.3,
-    alpha = 0.65
-  ) +
-  geom_line(
-    linewidth = 0.75
-  ) +
-  geom_point(
-    size = 1.8
-  ) +
-  facet_wrap(
-    ~ continent
-  ) +
-  scale_colour_manual(
-    values = comorb_colours,
-    drop = FALSE
-  ) +
-  scale_y_continuous(
-    labels = scales::label_number(
-      accuracy = 0.1
-    ),
-    expand = ggplot2::expansion(
-      mult = c(0, 0.08)
-    )
-  ) +
-  labs(
-    x = "Age group, years",
-    y = "Hospitalised cases per 10,000\nsubgroup population",
-    colour = "Number of comorbidities"
-  ) +
-  theme_lancet_clean(base_size = 10) +
-  theme(
-    strip.text = element_text(
-      face = "bold"
-    ),
-    axis.text.x = element_text(
-      angle = 45,
-      hjust = 1
-    )
-  )
-
-p_region
-
-## 12. Hospitalisation plot: per-country "spaghetti" + global median/CI --
-country_hosp_by_run <- comorbid_burden_plot |>
-  dplyr::filter(
-    !is.na(adjusted_hosp_rate),
-    !is.na(population_10yr),
-    !is.na(prevalence),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    burden_age_group = factor(
-      burden_age_group,
-      levels = age_levels
-    ),
-    comorbidity = factor(
-      comorbidity,
-      levels = comorb_levels
-    ),
-    subgroup_population =
-      population_10yr * prevalence
-  ) |>
-  dplyr::group_by(
-    iso3,
-    country,
-    run,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    hospitalised = sum(
-      hospitalised,
-      na.rm = TRUE
-    ),
-    subgroup_population = sum(
-      subgroup_population,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    hospitalisation_rate_10k =
-      hospitalised /
-      subgroup_population *
-      10000
-  )
-
-country_hosp_summary <- country_hosp_by_run |>
-  dplyr::group_by(
-    iso3,
-    country,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    median_rate = median(
-      hospitalisation_rate_10k,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  )
-
-global_hosp_by_run <- comorbid_burden_plot |>
-  dplyr::filter(
-    !is.na(adjusted_hosp_rate),
-    !is.na(population_10yr),
-    !is.na(prevalence),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    burden_age_group = factor(
-      burden_age_group,
-      levels = age_levels
-    ),
-    comorbidity = factor(
-      comorbidity,
-      levels = comorb_levels
-    ),
-    subgroup_population =
-      population_10yr * prevalence
-  ) |>
-  dplyr::group_by(
-    run,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    hospitalised = sum(
-      hospitalised,
-      na.rm = TRUE
-    ),
-    subgroup_population = sum(
-      subgroup_population,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    hospitalisation_rate_10k =
-      hospitalised /
-      subgroup_population *
-      10000
-  )
-
-global_hosp_summary <- global_hosp_by_run |>
-  dplyr::group_by(
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    median_rate = median(
-      hospitalisation_rate_10k,
-      na.rm = TRUE
-    ),
-    lower = quantile(
-      hospitalisation_rate_10k,
-      0.025,
-      na.rm = TRUE
-    ),
-    upper = quantile(
-      hospitalisation_rate_10k,
-      0.975,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  )
-
-
-p_spaghetti_hosp <- ggplot2::ggplot() +
-  
-  # Individual countries
-  ggplot2::geom_line(
-    data = country_hosp_summary,
-    mapping = ggplot2::aes(
-      x = burden_age_group,
-      y = median_rate,
-      group = iso3
-    ),
-    colour = "grey65",
-    linewidth = 0.3,
-    alpha = 0.35
-  ) +
-  
-  # Global 95% uncertainty interval
-  ggplot2::geom_ribbon(
-    data = global_hosp_summary,
-    mapping = ggplot2::aes(
-      x = burden_age_group,
-      ymin = lower,
-      ymax = upper,
-      group = 1
-    ),
-    fill = "grey45",
-    alpha = 0.18
-  ) +
-  
-  # Population-weighted global median
-  ggplot2::geom_line(
-    data = global_hosp_summary,
-    mapping = ggplot2::aes(
-      x = burden_age_group,
-      y = median_rate,
-      group = 1
-    ),
-    colour = "black",
-    linewidth = 1
-  ) +
-  
-  ggplot2::facet_wrap(
-    ~ comorbidity,
-    ncol = 2,
-    scales = "free_y",
-    labeller = ggplot2::labeller(
-      comorbidity = c(
-        "0" = "No comorbidity",
-        "1" = "One comorbidity",
-        "2" = "Two comorbidities",
-        "3+" = "Three or more comorbidities"
-      )
-    )
-  ) +
-  
-  ggplot2::scale_y_continuous(
-    labels = scales::label_number(
-      accuracy = 0.1
-    ),
-    expand = ggplot2::expansion(
-      mult = c(0, 0.06)
-    )
-  ) +
-  
-  ggplot2::labs(
-    x = "Age group, years",
-    y = "Hospitalised cases per 10,000\nsubgroup population"
-  ) +
-  
-  theme_lancet_clean(
-    base_size = 10
-  ) +
-  
-  ggplot2::theme(
-    legend.position = "none",
-    
-    strip.background =
-      ggplot2::element_blank(),
-    
-    strip.text =
-      ggplot2::element_text(
-        face = "bold",
-        size = 10,
-        hjust = 0
-      ),
-    
-    axis.text.x =
-      ggplot2::element_text(
-        angle = 45,
-        hjust = 1,
-        vjust = 1
-      ),
-    
-    panel.spacing =
-      grid::unit(10, "pt")
-  )
-
-p_spaghetti_hosp
-
-
-# NOTE: region_colours is currently defined but unused in this script.
-region_colours <- c(
-  "East Asia & Pacific" = "#00468B",
-  "Europe & Central Asia" = "#0099B4",
-  "Latin America & Caribbean" = "#925E9F",
-  "Middle East & North Africa" = "#FDAF91",
-  "North America" = "#42B540",
-  "South Asia" = "#ED0000",
-  "Sub-Saharan Africa" = "#7E6148"
-)
-
-
-## 13. Fatal burden: apply hospitalised/non-hospitalised fatality rates --
-##     (note: lhs_samples.R defines fatal_sample twice with different
-##     formulas — this uses whichever definition ran last in that script)
 fatal_sample_long <- fatal_sample |>
   dplyr::mutate(
     run = dplyr::row_number()
@@ -1097,11 +680,11 @@ fatal_sample_long <- fatal_sample |>
   tidyr::pivot_longer(
     cols = dplyr::starts_with("fatal_"),
     names_to = "group_number",
-    values_to = "fatal_rate_hosp"
+    values_to = "marginal_fatal_rate_hosp"
   ) |>
   dplyr::mutate(
     group_number = as.integer(
-      sub("fatal_", "", group_number)
+      sub("^fatal_", "", group_number)
     )
   )
 
@@ -1112,15 +695,15 @@ nh_fatal_sample_long <- nh_fatal_sample |>
   tidyr::pivot_longer(
     cols = dplyr::starts_with("nh_fatal_"),
     names_to = "group_number",
-    values_to = "fatal_rate_nonhosp"
+    values_to = "marginal_fatal_rate_nonhosp"
   ) |>
   dplyr::mutate(
     group_number = as.integer(
-      sub("nh_fatal_", "", group_number)
+      sub("^nh_fatal_", "", group_number)
     )
   )
 
-comorbid_burden_fatal <- comorbid_burden_step2 |>
+prev_death_rr_long <- prev_death_rr_long |>
   dplyr::left_join(
     fatal_sample_long,
     by = c(
@@ -1136,23 +719,89 @@ comorbid_burden_fatal <- comorbid_burden_step2 |>
       "run"
     ),
     relationship = "many-to-one"
-  ) |>
-  dplyr::mutate(
-    fatal_hospitalised =
-      hospitalised * fatal_rate_hosp,
-    
-    fatal_nonhospitalised =
-      nonhospitalised * fatal_rate_nonhosp,
-    
-    fatal =
-      fatal_hospitalised +
-      fatal_nonhospitalised
   )
 
-fatal_plot_data <- comorbid_burden_fatal |>
+adjusted_fatal_rate <- prev_death_rr_long |>
+  dplyr::group_by(
+    iso3,
+    burden_age_group,
+    group_number,
+    run
+  ) |>
+  dplyr::mutate(
+    weighted_death_rr = sum(
+      prevalence * rr_death_draw,
+      na.rm = TRUE
+    ),
+    
+    fatal_rate_hosp_reference =
+      marginal_fatal_rate_hosp /
+      weighted_death_rr,
+    
+    fatal_rate_nonhosp_reference =
+      marginal_fatal_rate_nonhosp /
+      weighted_death_rr,
+    
+    adjusted_fatal_rate_hosp =
+      fatal_rate_hosp_reference *
+      rr_death_draw,
+    
+    adjusted_fatal_rate_nonhosp =
+      fatal_rate_nonhosp_reference *
+      rr_death_draw
+  ) |>
+  dplyr::ungroup()
+
+adjusted_fatal_rate_103 <- adjusted_fatal_rate |>
+  dplyr::semi_join(
+    analysis_iso3,
+    by = "iso3"
+  )
+
+## 9. Compute the full comorbidity-stratified burden ---------------------
+
+comorbid_burden_full <-
+  calculate_comorbid_burden_step3(
+    infection_comorb_long =
+      infection_comorb_long,
+    
+    adjusted_hosp_rate =
+      adjusted_hosp_rate_103,
+    
+    adjusted_fatal_rate =
+      adjusted_fatal_rate_103,
+    
+    lhs_sample_young =
+      lhs_sample_young,
+    
+    lhs_old =
+      lhs_old,
+    
+    le_sample =
+      le_sample
+  )
+
+## 10. Attach subgroup population denominators --------------------------
+
+population_lookup <- prev_comorb_long |>
+  dplyr::select(
+    iso3,
+    burden_age_group,
+    group_number,
+    comorbidity,
+    population_10yr,
+    prevalence
+  ) |>
+  dplyr::distinct()
+
+comorbid_burden_analysis <- comorbid_burden_full |>
   dplyr::select(
     -dplyr::any_of(
-      c("population_10yr", "prevalence")
+      c(
+        "population_10yr",
+        "prevalence",
+        "subgroup_population"
+      )
     )
   ) |>
   dplyr::left_join(
@@ -1170,355 +819,14 @@ fatal_plot_data <- comorbid_burden_fatal |>
       population_10yr * prevalence
   )
 
-fatal_by_run <- fatal_plot_data |>
-  dplyr::filter(
-    !is.na(fatal),
-    !is.na(subgroup_population),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    burden_age_group = factor(
-      burden_age_group,
-      levels = age_levels
-    ),
-    comorbidity = factor(
-      comorbidity,
-      levels = comorb_levels
-    )
-  ) |>
-  dplyr::group_by(
-    run,
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    fatal = sum(
-      fatal,
-      na.rm = TRUE
-    ),
-    symptomatic = sum(
-      symptomatic,
-      na.rm = TRUE
-    ),
-    subgroup_population = sum(
-      subgroup_population,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    fatal_rate_100k =
-      fatal /
-      subgroup_population *
-      100000,
-    
-    case_fatality_percent =
-      fatal /
-      symptomatic *
-      100
-  )
-
-fatal_plot_summary <- fatal_by_run |>
-  dplyr::group_by(
-    burden_age_group,
-    comorbidity
-  ) |>
-  dplyr::summarise(
-    median = median(
-      fatal_rate_100k,
-      na.rm = TRUE
-    ),
-    lower = quantile(
-      fatal_rate_100k,
-      0.025,
-      na.rm = TRUE
-    ),
-    upper = quantile(
-      fatal_rate_100k,
-      0.975,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  )
-
-p_fatal_burden <- ggplot2::ggplot(
-  fatal_plot_summary,
-  ggplot2::aes(
-    x = burden_age_group,
-    y = median,
-    colour = comorbidity,
-    fill = comorbidity,
-    group = comorbidity
-  )
-) +
-  ggplot2::geom_ribbon(
-    ggplot2::aes(
-      ymin = lower,
-      ymax = upper
-    ),
-    colour = NA,
-    alpha = 0.10
-  ) +
-  ggplot2::geom_line(
-    linewidth = 0.95
-  ) +
-  ggplot2::geom_point(
-    size = 2.3
-  ) +
-  ggplot2::scale_colour_manual(
-    values = comorb_colours,
-    drop = FALSE
-  ) +
-  ggplot2::scale_fill_manual(
-    values = comorb_colours,
-    drop = FALSE
-  ) +
-  ggplot2::scale_y_continuous(
-    labels = scales::label_number(
-      accuracy = 0.01,
-      big.mark = ","
-    ),
-    expand = ggplot2::expansion(
-      mult = c(0, 0.08)
-    )
-  ) +
-  ggplot2::labs(
-    title = "Fatal disease burden",
-    subtitle = "Population-level deaths incorporating infection incidence and age-specific fatality",
-    x = "Age group, years",
-    y = "Deaths per 100,000\nsubgroup population",
-    colour = "Number of comorbidities",
-    fill = "Number of comorbidities"
-  ) +
-  theme_lancet_clean(
-    base_size = 11
-  ) +
-  ggplot2::theme(
-    legend.position = "bottom",
-    plot.title = ggplot2::element_text(
-      face = "bold"
-    ),
-    plot.subtitle = ggplot2::element_text(
-      size = 9,
-      colour = "grey30"
-    ),
-    axis.text.x = ggplot2::element_text(
-      angle = 45,
-      hjust = 1
-    )
-  )
-
-p_fatal_burden
-
-
-## 14. FOI aggregation (separate from the comorbidity burden above) ------
-##     Country-level force-of-infection summary (median + 95% CI across
-##     ~100 FOI draw columns), computed with data.table for speed.
-library(data.table)
-
-foi_dt <- as.data.table(allfoi)
-
-foi_cols <- grep(
-  "^foi[0-9]+$",
-  names(foi_dt),
-  value = TRUE
+saveRDS(
+  comorbid_burden_full,
+  file = "MainData/comorbid_burden_full.rds"
 )
 
-length(foi_cols)
+saveRDS(
+  comorbid_burden_analysis,
+  file = "MainData/comorbid_burden_analysis.rds"
+)
 
-foi_dt_valid <- foi_dt[
-  !is.na(iso3) &
-    is.finite(tot) &
-    tot > 0
-]
-
-country_foi_draws <- foi_dt_valid[
-  ,
-  c(
-    list(
-      country = first(country),
-      continent = first(continent),
-      region = first(region),
-      population = sum(tot, na.rm = TRUE)
-    ),
-    lapply(
-      .SD,
-      function(x) {
-        weighted.mean(
-          x,
-          w = tot,
-          na.rm = TRUE
-        )
-      }
-    )
-  ),
-  by = iso3,
-  .SDcols = foi_cols
-]
-
-## Vectorized median/quantile across the ~100 foi draw columns, computed
-## once on a plain matrix instead of row-by-row via dplyr::rowwise()
-## (rowwise() rebuilds a mini-tibble per row; apply() on a matrix avoids
-## that overhead entirely).
-foi_matrix <- as.matrix(country_foi_draws[, ..foi_cols])
-
-country_foi <- country_foi_draws |>
-  dplyr::as_tibble() |>
-  dplyr::mutate(
-    foi = apply(foi_matrix, 1, median, na.rm = TRUE),
-    foi_lower = apply(foi_matrix, 1, quantile, probs = 0.025, na.rm = TRUE),
-    foi_upper = apply(foi_matrix, 1, quantile, probs = 0.975, na.rm = TRUE)
-  ) |>
-  dplyr::select(
-    iso3,
-    country,
-    continent,
-    region,
-    population,
-    foi,
-    foi_lower,
-    foi_upper
-  )
-
-
-## 15. Merge FOI with the fatal burden into a country x broad-age-group
-##     table (foi x multimorbidity prevalence x fatality rate). This is
-##     not plotted in this script — it looks like input prepared for a
-##     bubble/surface plot built elsewhere.
-surface_data_by_run <- fatal_plot_data |>
-  dplyr::filter(
-    !is.na(fatal),
-    !is.na(population_10yr),
-    !is.na(prevalence),
-    group_number <= 8
-  ) |>
-  dplyr::mutate(
-    broad_age_group = dplyr::case_when(
-      group_number %in% 1:4 ~ "0–39 years",
-      group_number %in% 5:8 ~ "40–79 years",
-      TRUE ~ NA_character_
-    ),
-    
-    subgroup_population =
-      population_10yr * prevalence,
-    
-    multimorbid_population =
-      dplyr::if_else(
-        as.character(comorbidity) %in% c("2", "3+"),
-        subgroup_population,
-        0
-      )
-  ) |>
-  dplyr::filter(
-    !is.na(broad_age_group)
-  ) |>
-  dplyr::group_by(
-    iso3,
-    country,
-    continent,
-    run,
-    broad_age_group
-  ) |>
-  dplyr::summarise(
-    fatal = sum(
-      fatal,
-      na.rm = TRUE
-    ),
-    
-    total_population = sum(
-      subgroup_population,
-      na.rm = TRUE
-    ),
-    
-    multimorbid_population = sum(
-      multimorbid_population,
-      na.rm = TRUE
-    ),
-    
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    fatal_rate_100k =
-      fatal / total_population * 100000,
-    
-    multimorbidity_prevalence =
-      multimorbid_population /
-      total_population *
-      100
-  )
-
-
-surface_data_by_run <- surface_data_by_run |>
-  dplyr::left_join(
-    country_foi |>
-      dplyr::select(
-        iso3,
-        foi,
-        foi_lower,
-        foi_upper
-      ),
-    by = "iso3",
-    relationship = "many-to-one"
-  )
-
-## This is the final object this script produces. As of this pass it is
-## not printed/saved/plotted here — add a print()/ggsave()/write step if
-## you expect to consume it from this script rather than another one.
-surface_country_summary <- surface_data_by_run |>
-  dplyr::filter(
-    is.finite(foi),
-    is.finite(fatal_rate_100k),
-    is.finite(multimorbidity_prevalence)
-  ) |>
-  dplyr::group_by(
-    iso3,
-    country,
-    continent,
-    broad_age_group
-  ) |>
-  dplyr::summarise(
-    foi = dplyr::first(foi),
-    
-    foi_lower =
-      dplyr::first(foi_lower),
-    
-    foi_upper =
-      dplyr::first(foi_upper),
-    
-    multimorbidity_prevalence =
-      median(
-        multimorbidity_prevalence,
-        na.rm = TRUE
-      ),
-    
-    fatal_rate_100k =
-      median(
-        fatal_rate_100k,
-        na.rm = TRUE
-      ),
-    
-    fatal_rate_lower =
-      quantile(
-        fatal_rate_100k,
-        0.025,
-        na.rm = TRUE
-      ),
-    
-    fatal_rate_upper =
-      quantile(
-        fatal_rate_100k,
-        0.975,
-        na.rm = TRUE
-      ),
-    
-    .groups = "drop"
-  ) |>
-  dplyr::mutate(
-    broad_age_group = factor(
-      broad_age_group,
-      levels = c(
-        "0–39 years",
-        "40–79 years"
-      )
-    )
-  )
+## Burden calc end --------------------------------------------------------------
