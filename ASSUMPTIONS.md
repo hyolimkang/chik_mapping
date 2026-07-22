@@ -223,7 +223,7 @@ for all countries, attack rate will initially be represented using
 scenarios or probability distributions. Illustrative scenarios may include:
 
 $$
-AR_c \in \{0.10,\ 0.25,\ 0.45\}
+AR_c \in \lbrace 0.10,\ 0.25,\ 0.45 \rbrace
 $$
 
 representing low-, moderate-, and high-intensity outbreaks among
@@ -531,7 +531,7 @@ where $S=1$ indicates inclusion as a reported SINAN case.
 The model allows the age-risk relationship to vary by comorbidity count:
 
 $$
-\text{logit}\{P(H=1)\} = \alpha_c + f_c(age) + \beta_{\mathrm{sex}}sex.
+\text{logit}\lbrace P(H=1) \rbrace = \alpha_c + f_c(age) + \beta_{\mathrm{sex}}sex.
 $$
 
 Predicted hospitalisation probabilities are standardised within each
@@ -907,7 +907,7 @@ For outbreak-response immunisation, a particularly useful decision metric
 will be the maximum feasible response delay:
 
 $$
-\tau^*_{c,a} = \max \left\{ \tau : BRR_{c,a,\tau}>1 \right\}
+\tau^*_{c,a} = \max \left\lbrace \tau : BRR_{c,a,\tau}>1 \right\rbrace
 $$
 
 This represents the latest time at which vaccination can begin while
