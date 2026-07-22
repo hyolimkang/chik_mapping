@@ -39,15 +39,7 @@ For country $c$, age group $a$, and vaccination strategy $s$, the general
 structure will be:
 
 $$
-\text{Benefit}_{c,a,s}
-=
-V_{c,a,s}
-\times
-P(\text{infection during the relevant risk period})_{c,a,s}
-\times
-VE_s
-\times
-P(\text{outcome}\mid\text{infection})_a
+\text{Benefit}_{c,a,s} = V_{c,a,s} \times P(\text{infection during the relevant risk period})_{c,a,s} \times VE_s \times P(\text{outcome}\mid\text{infection})_a
 $$
 
 where $V_{c,a,s}$ is the number vaccinated and $VE_s$ represents the
@@ -57,21 +49,14 @@ disease.
 Vaccine-attributable risk will be estimated as:
 
 $$
-\text{Vaccine risk}_{c,a,s}
-=
-V_{c,a,s}
-\times
-P(\text{vaccine-attributable adverse outcome})_a
+\text{Vaccine risk}_{c,a,s} = V_{c,a,s} \times P(\text{vaccine-attributable adverse outcome})_a
 $$
 
 Benefit–risk ratios will be calculated separately for hospitalisations,
 deaths, and DALYs:
 
 $$
-BRR_{c,a,s}
-=
-\frac{\text{health outcomes averted}_{c,a,s}}
-{\text{vaccine-attributable outcomes}_{c,a,s}}
+BRR_{c,a,s} = \frac{\text{health outcomes averted}_{c,a,s}}{\text{vaccine-attributable outcomes}_{c,a,s}}
 $$
 
 Uncertainty in epidemiological, clinical, vaccine-effectiveness, and
@@ -141,20 +126,13 @@ cumulative probability of infection among susceptible vaccine recipients
 will be:
 
 $$
-P(\text{infection over }T)
-=
-1 - \exp(-\lambda_c T)
+P(\text{infection over }T) = 1 - \exp(-\lambda_c T)
 $$
 
 The vaccine-preventable infection risk will therefore be:
 
 $$
-P(\text{vaccine-preventable infection})
-=
-S_c(a_v)
-\left[
-1-\exp(-\lambda_c T)
-\right]
+P(\text{vaccine-preventable infection}) = S_c(a_v) \left[ 1-\exp(-\lambda_c T) \right]
 $$
 
 Routine vaccination scenarios will vary:
@@ -183,9 +161,7 @@ For travel to country $c$ during period $t$, the infection probability
 over a trip of duration $d$ will be:
 
 $$
-P(\text{travel-associated infection})
-=
-1-\exp(-\lambda_{c,t}d)
+P(\text{travel-associated infection}) = 1-\exp(-\lambda_{c,t}d)
 $$
 
 where $\lambda_{c,t}$ represents the infection hazard during the travel
@@ -229,13 +205,7 @@ For country $c$ and age group $a$, infections in the absence of
 vaccination will be calculated as:
 
 $$
-I^0_{c,a}
-=
-N_{c,a}
-\times
-S_{c,a}
-\times
-AR_c
+I^0_{c,a} = N_{c,a} \times S_{c,a} \times AR_c
 $$
 
 where:
@@ -278,24 +248,13 @@ Let:
 The fraction of the epidemic remaining after protection develops will be:
 
 $$
-q_k(\tau)
-=
-1-
-F_k(\tau+d_{\text{immune}})
+q_k(\tau) = 1-F_k(\tau+d_{\text{immune}})
 $$
 
 The directly preventable infections will then be:
 
 $$
-I^{\text{averted}}_{c,a,k}
-=
-I^0_{c,a}
-\times
-v_{c,a}
-\times
-VE_{\text{infection}}
-\times
-q_k(\tau)
+I^{\text{averted}}_{c,a,k} = I^0_{c,a} \times v_{c,a} \times VE_{\text{infection}} \times q_k(\tau)
 $$
 
 where $v_{c,a}$ is vaccination coverage.
@@ -305,17 +264,7 @@ than infection, the infection process will remain unchanged and prevented
 symptomatic outcomes will be estimated as:
 
 $$
-C^{\text{averted}}_{c,a,k}
-=
-I^0_{c,a}
-\times
-v_{c,a}
-\times
-VE_{\text{disease}}
-\times
-q_k(\tau)
-\times
-P(\text{symptomatic}\mid\text{infection})
+C^{\text{averted}}_{c,a,k} = I^0_{c,a} \times v_{c,a} \times VE_{\text{disease}} \times q_k(\tau) \times P(\text{symptomatic}\mid\text{infection})
 $$
 
 The primary global analysis will estimate direct effects only. Potential
@@ -351,11 +300,7 @@ Where the appropriate outbreak archetype for a country is uncertain,
 outcomes will be averaged across archetypes:
 
 $$
-E[I^{\text{averted}}_c]
-=
-\sum_k
-P(k\mid c)
-I^{\text{averted}}_{c,k}
+E[I^{\text{averted}}_c] = \sum_k P(k\mid c) I^{\text{averted}}_{c,k}
 $$
 
 In the initial analysis, equal weights or broad regional weights may be
@@ -387,9 +332,7 @@ For each posterior epidemic trajectory, the preventable fraction will be
 calculated for a range of vaccination delays:
 
 $$
-q(\tau)
-=
-1-F(\tau+d_{\text{immune}})
+q(\tau) = 1-F(\tau+d_{\text{immune}})
 $$
 
 This will generate a lookup table or posterior distribution linking the
@@ -414,10 +357,7 @@ Three alternative assumptions will be considered.
 All age groups experience the same per-capita infection risk:
 
 $$
-w_{c,a}
-=
-\frac{N_{c,a}}
-{\sum_a N_{c,a}}
+w_{c,a} = \frac{N_{c,a}}{\sum_a N_{c,a}}
 $$
 
 ### 7.2 Susceptibility-adjusted exposure
@@ -426,10 +366,7 @@ Infections are allocated according to both population size and baseline
 susceptibility:
 
 $$
-w_{c,a}
-=
-\frac{N_{c,a}S_{c,a}}
-{\sum_a N_{c,a}S_{c,a}}
+w_{c,a} = \frac{N_{c,a}S_{c,a}}{\sum_a N_{c,a}S_{c,a}}
 $$
 
 This will be the preferred base case for outbreak-response vaccination.
@@ -440,11 +377,7 @@ The existing catalytic allocation will be retained as a sensitivity
 analysis:
 
 $$
-w_{c,a}
-\propto
-N_{c,a}
-\lambda_c
-S_{c,a}
+w_{c,a} \propto N_{c,a} \lambda_c S_{c,a}
 $$
 
 Comparing these assumptions will quantify the extent to which
@@ -459,31 +392,17 @@ After estimating infections under each strategy, a common clinical
 progression model will be applied:
 
 $$
-\text{Infections}
-\rightarrow
-\text{Symptomatic cases}
-\rightarrow
-\text{Hospitalisations, deaths, and chronic outcomes}
-\rightarrow
-\text{DALYs}
+\text{Infections} \rightarrow \text{Symptomatic cases} \rightarrow \text{Hospitalisations, deaths, and chronic outcomes} \rightarrow \text{DALYs}
 $$
 
 For each country, age group, and comorbidity group:
 
 $$
-\text{Symptomatic}_{c,a,m}
-=
-I_{c,a,m}
-\times
-P(\text{symptomatic}\mid\text{infection})
+\text{Symptomatic}_{c,a,m} = I_{c,a,m} \times P(\text{symptomatic}\mid\text{infection})
 $$
 
 $$
-\text{Hospitalised}_{c,a,m}
-=
-\text{Symptomatic}_{c,a,m}
-\times
-P(\text{hospitalisation}\mid\text{symptomatic},a,m)
+\text{Hospitalised}_{c,a,m} = \text{Symptomatic}_{c,a,m} \times P(\text{hospitalisation}\mid\text{symptomatic},a,m)
 $$
 
 where $m$ denotes comorbidity category.
@@ -922,11 +841,7 @@ transmission.
 Vaccine-attributable adverse outcomes will be estimated by age group:
 
 $$
-AE_{c,a,s}
-=
-V_{c,a,s}
-\times
-P(AE\mid a)
+AE_{c,a,s} = V_{c,a,s} \times P(AE\mid a)
 $$
 
 Outcomes will include:
@@ -992,13 +907,7 @@ For outbreak-response immunisation, a particularly useful decision metric
 will be the maximum feasible response delay:
 
 $$
-\tau^*_{c,a}
-=
-\max
-\left\{
-\tau :
-BRR_{c,a,\tau}>1
-\right\}
+\tau^*_{c,a} = \max \left\{ \tau : BRR_{c,a,\tau}>1 \right\}
 $$
 
 This represents the latest time at which vaccination can begin while
@@ -1016,17 +925,7 @@ The analysis will use a tiered modelling framework.
 A simplified model will be applied consistently to all countries:
 
 $$
-\text{Population}
-\rightarrow
-\text{Susceptibility}
-\rightarrow
-\text{Outbreak attack rate}
-\rightarrow
-\text{Vaccination timing}
-\rightarrow
-\text{Outcomes averted}
-\rightarrow
-\text{Benefit–risk}
+\text{Population} \rightarrow \text{Susceptibility} \rightarrow \text{Outbreak attack rate} \rightarrow \text{Vaccination timing} \rightarrow \text{Outcomes averted} \rightarrow \text{Benefit–risk}
 $$
 
 This tier is intended for cross-country comparison and policy screening.
