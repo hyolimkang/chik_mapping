@@ -8,6 +8,10 @@ comorbid_burden_analysis <-
     "MainData/comorbid_burden_analysis.rds"
   )
 
+burden_ABCD_all <- readRDS(
+  "Outputs/burden_ABCD_all.rds"
+)
+
 ## -----------------------------------------------------------------------
 ## Shared comorbidity levels, labels, and colours
 ## -----------------------------------------------------------------------
@@ -57,6 +61,11 @@ outcome_labels <- c(
   "Fatal" = "Deaths",
   "DALY" = "DALYs"
 )
+
+age_levels <- 
+  c("[0,10)",  "[10,20)", "[20,30)", "[30,40)", "[40,50)", "[50,60)",
+    "[60,70)", "[70,80)")
+
 ## =======================================================================
 ## Hospitalisation burden by age and comorbidity
 ## Input: comorbid_burden_analysis
@@ -557,8 +566,320 @@ p_region <- ggplot2::ggplot(
 
 p_region
 
+## ============================================================
+## Calculate hospitalisation rates by archetype and PSA run
+## ============================================================
+
+archetype_labels <- c(
+  A = "A. Finite circulation since introduction",
+  B = "B. Long-term endemic equilibrium",
+  C = "C. Episodic transmission",
+  D = "D. Conditional epidemic potential"
+)
+
+plot_archetype_run <- comorbid_burden_analysis |>
+  dplyr::filter(
+    model_code %in% c("A", "B", "C", "D"),
+    group_number <= 8
+  ) |>
+  
+  ## First aggregate within country to avoid duplicating
+  ## population denominators
+  dplyr::group_by(
+    model_code,
+    iso3,
+    burden_age_group,
+    group_number,
+    comorbidity,
+    run
+  ) |>
+  dplyr::summarise(
+    hospitalised = sum(
+      hospitalised,
+      na.rm = TRUE
+    ),
+    
+    subgroup_population =
+      dplyr::first(
+        subgroup_population
+      ),
+    
+    .groups = "drop"
+  ) |>
+  
+  ## Then pool countries within each archetype
+  dplyr::group_by(
+    model_code,
+    burden_age_group,
+    group_number,
+    comorbidity,
+    run
+  ) |>
+  dplyr::summarise(
+    hospitalised = sum(
+      hospitalised,
+      na.rm = TRUE
+    ),
+    
+    subgroup_population = sum(
+      subgroup_population,
+      na.rm = TRUE
+    ),
+    
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    rate_per_10000 =
+      hospitalised /
+      subgroup_population *
+      10000
+  )
 
 
+## ============================================================
+## Summarise uncertainty across final PSA runs
+## ============================================================
+
+plot_archetype_summary <- plot_archetype_run |>
+  dplyr::group_by(
+    model_code,
+    burden_age_group,
+    group_number,
+    comorbidity
+  ) |>
+  dplyr::summarise(
+    median = stats::median(
+      rate_per_10000,
+      na.rm = TRUE
+    ),
+    
+    lower = stats::quantile(
+      rate_per_10000,
+      probs = 0.025,
+      na.rm = TRUE
+    ),
+    
+    upper = stats::quantile(
+      rate_per_10000,
+      probs = 0.975,
+      na.rm = TRUE
+    ),
+    
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    model_code = factor(
+      model_code,
+      levels = c("A", "B", "C", "D")
+    ),
+    
+    burden_age_group = factor(
+      burden_age_group,
+      levels = age_crosswalk_9 |>
+        dplyr::filter(
+          as.integer(
+            as.character(group)
+          ) <= 8
+        ) |>
+        dplyr::arrange(
+          as.integer(
+            as.character(group)
+          )
+        ) |>
+        dplyr::pull(
+          burden_age_group
+        )
+    ),
+    
+    comorbidity = factor(
+      comorbidity,
+      levels = c("0", "1", "2+")
+    )
+  )
+
+p_archetype <- ggplot2::ggplot(
+  plot_archetype_summary,
+  ggplot2::aes(
+    x = burden_age_group,
+    y = median,
+    colour = comorbidity,
+    group = comorbidity
+  )
+) +
+  ggplot2::geom_errorbar(
+    ggplot2::aes(
+      ymin = lower,
+      ymax = upper
+    ),
+    width = 0.1,
+    linewidth = 0.3,
+    alpha = 0.65
+  ) +
+  ggplot2::geom_line(
+    linewidth = 0.75
+  ) +
+  ggplot2::geom_point(
+    size = 1.8
+  ) +
+  ggplot2::facet_wrap(
+    ~ model_code,
+    ncol = 2,
+    labeller = ggplot2::as_labeller(
+      archetype_labels
+    )
+  ) +
+  ggplot2::scale_colour_manual(
+    values = comorb_colours,
+    labels = comorb_labels,
+    drop = FALSE
+  ) +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_number(
+      accuracy = 0.1
+    ),
+    expand = ggplot2::expansion(
+      mult = c(0, 0.08)
+    )
+  ) +
+  ggplot2::labs(
+    x = "Age group, years",
+    y = paste0(
+      "Hospitalised cases per 10,000\n",
+      "subgroup population"
+    ),
+    colour = "Number of comorbidities"
+  ) +
+  theme_lancet_clean(
+    base_size = 10
+  ) +
+  ggplot2::theme(
+    strip.text = ggplot2::element_text(
+      face = "bold",
+      size = 9
+    ),
+    axis.text.x = ggplot2::element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+
+p_archetype
+
+## ============================================================
+## Calculate country-specific hospitalisation rates
+## ============================================================
+
+plot_country_run <- comorbid_burden_analysis |>
+  dplyr::filter(
+    model_code %in% c("A", "B", "C", "D"),
+    group_number <= 8
+  ) |>
+  dplyr::group_by(
+    model_code,
+    iso3,
+    country,
+    burden_age_group,
+    group_number,
+    comorbidity,
+    run
+  ) |>
+  dplyr::summarise(
+    hospitalised = sum(
+      hospitalised,
+      na.rm = TRUE
+    ),
+    subgroup_population =
+      dplyr::first(subgroup_population),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    rate_per_10000 =
+      hospitalised /
+      subgroup_population *
+      10000
+  )
+
+plot_country_summary <- plot_country_run |>
+  dplyr::group_by(
+    model_code,
+    iso3,
+    country,
+    burden_age_group,
+    group_number,
+    comorbidity
+  ) |>
+  dplyr::summarise(
+    median_rate = stats::median(
+      rate_per_10000,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    model_code = factor(
+      model_code,
+      levels = c("A", "B", "C", "D")
+    ),
+    comorbidity = factor(
+      comorbidity,
+      levels = c("0", "1", "2+")
+    )
+  )
+
+
+p_archetype_country_distribution <-
+  ggplot2::ggplot(
+    plot_country_summary,
+    ggplot2::aes(
+      x = model_code,
+      y = median_rate,
+      fill = comorbidity
+    )
+  ) +
+  ggplot2::geom_boxplot(
+    outlier.shape = NA,
+    linewidth = 0.35,
+    alpha = 0.75,
+    position = ggplot2::position_dodge(
+      width = 0.75
+    )
+  ) +
+  ggplot2::geom_point(
+    ggplot2::aes(
+      colour = comorbidity
+    ),
+    position = ggplot2::position_jitterdodge(
+      jitter.width = 0.12,
+      dodge.width = 0.75
+    ),
+    size = 0.8,
+    alpha = 0.45
+  ) +
+  ggplot2::facet_wrap(
+    ~ burden_age_group,
+    ncol = 4
+  ) +
+  ggplot2::scale_fill_manual(
+    values = comorb_colours,
+    labels = comorb_labels,
+    drop = FALSE
+  ) +
+  ggplot2::scale_colour_manual(
+    values = comorb_colours,
+    labels = comorb_labels,
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    x = "Transmission archetype",
+    y = "Hospitalised cases per 10,000\nsubgroup population",
+    fill = "Number of comorbidities",
+    colour = "Number of comorbidities"
+  ) +
+  theme_lancet_clean(
+    base_size = 10
+  )
+
+p_archetype_country_distribution
 ## =======================================================================
 ## 3. Hospitalisation plot:
 ##    per-country spaghetti plus global median and uncertainty
@@ -3301,3 +3622,150 @@ p_infection_rate_by_subgroup <-
   )
 
 p_infection_rate_by_subgroup
+
+## ============================================================
+## Step 2. Hospitalisation probability among symptomatic cases
+## ============================================================
+
+hospitalisation_risk_by_run <-
+  comorbid_burden_analysis |>
+  dplyr::filter(
+    group_number <= 8,
+    !is.na(symptomatic),
+    symptomatic > 0,
+    !is.na(hospitalised),
+    hospitalised >= 0
+  ) |>
+  dplyr::mutate(
+    burden_age_group = factor(
+      as.character(burden_age_group),
+      levels = age_levels
+    ),
+    comorbidity = factor(
+      as.character(comorbidity),
+      levels = comorb_levels
+    )
+  ) |>
+  dplyr::group_by(
+    run,
+    burden_age_group,
+    comorbidity
+  ) |>
+  dplyr::summarise(
+    symptomatic = sum(
+      symptomatic,
+      na.rm = TRUE
+    ),
+    hospitalised = sum(
+      hospitalised,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    hospitalisation_probability =
+      hospitalised /
+      symptomatic *
+      100
+  ) |>
+  dplyr::filter(
+    is.finite(hospitalisation_probability)
+  )
+
+hospitalisation_risk_summary <-
+  hospitalisation_risk_by_run |>
+  dplyr::group_by(
+    burden_age_group,
+    comorbidity
+  ) |>
+  dplyr::summarise(
+    probability_median = median(
+      hospitalisation_probability,
+      na.rm = TRUE
+    ),
+    probability_lower = quantile(
+      hospitalisation_probability,
+      probs = 0.025,
+      na.rm = TRUE
+    ),
+    probability_upper = quantile(
+      hospitalisation_probability,
+      probs = 0.975,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+p_hospitalisation_risk <-
+  ggplot2::ggplot(
+    hospitalisation_risk_summary,
+    ggplot2::aes(
+      x = burden_age_group,
+      y = probability_median,
+      fill = comorbidity
+    )
+  ) +
+  ggplot2::geom_col(
+    width = 0.72,
+    colour = "white",
+    linewidth = 0.3
+  ) +
+  ggplot2::geom_errorbar(
+    ggplot2::aes(
+      ymin = probability_lower,
+      ymax = probability_upper
+    ),
+    width = 0.16,
+    linewidth = 0.55,
+    colour = "grey20"
+  ) +
+  ggplot2::facet_wrap(
+    ~ comorbidity,
+    nrow = 1,
+    labeller = ggplot2::labeller(
+      comorbidity = comorb_labels
+    )
+  ) +
+  ggplot2::scale_fill_manual(
+    values = comorb_colours,
+    guide = "none",
+    drop = FALSE
+  ) +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_number(
+      accuracy = 0.1,
+      suffix = "%"
+    ),
+    expand = ggplot2::expansion(
+      mult = c(0, 0.08)
+    )
+  ) +
+  ggplot2::labs(
+    title =
+      "Age-specific hospitalisation probability among symptomatic cases",
+    subtitle =
+      "Bars show median probabilities; error bars show 95% uncertainty intervals",
+    x = "Age group, years",
+    y = "Hospitalisation probability among symptomatic cases"
+  ) +
+  theme_lancet_clean(
+    base_size = 10
+  ) +
+  ggplot2::theme(
+    strip.background = ggplot2::element_blank(),
+    strip.text = ggplot2::element_text(
+      face = "bold"
+    ),
+    axis.text.x = ggplot2::element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1
+    ),
+    plot.title = ggplot2::element_text(
+      face = "bold"
+    )
+  )
+
+p_hospitalisation_risk
+
+

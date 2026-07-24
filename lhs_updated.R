@@ -189,7 +189,7 @@ hosp_band <- hosp_raw %>%
   group_by(age_group) %>%
   summarise(
     hosp_n = sum(n[hosp], na.rm = TRUE),
-    denom_n = max(total_n, na.rm = TRUE),
+    denom_n = max(n, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(band_num = raw_age_to_band(age_group)) %>%
